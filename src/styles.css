@@ -123,3 +123,12 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .answer-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .stale-draft { margin: 0 0 12px; padding: 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--surface); }
 .stale-draft .btn { width: 100%; margin: 6px 0 0; }
+
+/* Quiz screens */
+.quiz > section, .quiz > .intro, .quiz-meta, .attempt > section, .attempt > .timer, .attempt > .questions-wrap { margin: 0 16px 14px; }
+.quiz-meta { list-style: none; padding: 0; margin-top: 0; display: grid; gap: 4px; }
+.attempts { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.attempts li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.note-box { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.link-btn { display: block; text-align: center; text-decoration: none; line-height: 48px; margin-top: 8px; }
+.start-block .btn, .start .btn { width: 100%; }

@@ -35,7 +35,8 @@ const SHELL = [
   "./src/ui/courses.js",
   "./src/ui/diagnostics.js",
   "./src/ui/dom.js",
-  "./src/ui/login.js"
+  "./src/ui/login.js",
+  "./src/ui/quiz.js"
 ];
 
 self.addEventListener('install', (event) => {
