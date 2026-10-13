@@ -156,11 +156,12 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 
 /* Forums */
 .topics { list-style: none; margin: 0; padding: 0 16px 16px; display: grid; gap: 10px; }
-.topic { display: grid; gap: 4px; padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
+.topic { min-width: 0; overflow-wrap: anywhere; display: grid; gap: 4px; padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
 .topic-link { font-weight: 600; text-decoration: none; color: inherit; min-height: 24px; }
 .topic-meta { color: var(--muted); }
 .posts { display: grid; gap: 10px; padding: 0 16px 16px; }
-.post { padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.post { min-width: 0; padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.post .html pre, .post .html table { display: block; max-width: 100%; overflow-x: auto; }
 .post.depth-1 { margin-left: 12px; }
 .post.depth-2 { margin-left: 24px; }
 .post.depth-3 { margin-left: 36px; }

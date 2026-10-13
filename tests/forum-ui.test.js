@@ -214,3 +214,15 @@ test('unconfirmed outcome is handed to the app (it reloads); signedout is silent
   assert.deepEqual(done, ['unknown']);
   assert.equal(post2.querySelector('.form-msg').textContent, '');
 });
+
+test('Final review: a plain pluginfile attachment URL is rewritten to the webservice path with the token; unsafe URLs are not linked', () => {
+  const att = [
+    { name: 'plain.pdf', url: 'https://aules.edu.gva.es/fpa/pluginfile.php/9/mod_forum/attachment/1/plain.pdf' },
+    { name: 'evil', url: 'javascript:alert(1)' },
+  ];
+  const el = renderTopic(topicProps({ posts: [{ id: 1, parentId: 0, subject: '', messageHtml: '<p>x</p>', author: 'A', created: 1, deleted: false, canReply: false, attachments: att }] }).props);
+  const links = [...el.querySelectorAll('.post ul.links a')];
+  assert.equal(links.length, 1);
+  assert.equal(links[0].getAttribute('href'), 'https://aules.edu.gva.es/fpa/webservice/pluginfile.php/9/mod_forum/attachment/1/plain.pdf?token=T');
+  assert.doesNotMatch(el.innerHTML, /javascript:/);
+});

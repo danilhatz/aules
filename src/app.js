@@ -713,6 +713,12 @@ export function createApp({
 
   const FORUM_PAGE = 20;
   const tryParse = (fn) => { try { return fn(); } catch { return null; } };
+  // Moodle's own message is shown as Moodle sent it when the app has no text for the error code.
+  const moodleText = (err) => {
+    const base = describeError(err);
+    const detail = err && err.message && err.message !== err.code && !S.errors[err.code] ? ` ${err.message}` : '';
+    return base + detail;
+  };
 
   async function showForum(courseId, cmid, session, rid) {
     const epoch = auth.epoch();
@@ -762,7 +768,7 @@ export function createApp({
       rawForums = fr.v;
     } else {
       if (handleFatal(fr.e)) return;
-      if (!savedForums) { showError(describeError(fr.e)); return; }
+      if (!savedForums || fr.e.code !== 'network') { showError(moodleText(fr.e)); return; } // only a lost connection counts as offline
       rawForums = savedForums.data;
       offlineList = true;
     }
@@ -774,7 +780,7 @@ export function createApp({
       return;
     }
     if (fr.ok) cache.set(`forums:${courseId}`, rawForums);
-    if (!forum) { showError(S.forumNotFound); return; }
+    if (!forum) { showError(offlineList ? describeError(fr.e) : S.forumNotFound); return; }
 
     const cachedTopics = () => {
       const t = cache.get(`topics:${forum.id}:0`);
@@ -802,6 +808,7 @@ export function createApp({
       return;
     }
     if (handleFatal(tr.e)) return;
+    if (tr.e.code !== 'network') { showError(moodleText(tr.e)); return; }
     if (here()) paint(forum, cachedTopics(), { hasMore: false, fresh: false, offline: true });
   }
 
@@ -812,7 +819,13 @@ export function createApp({
     pendingForumFlash = null;
     const here = () => { const v = view(); return v.type === 'topic' && v.discussionId === discussionId && rid === renderId && auth.epoch() === epoch; };
     const back = () => h('a', { class: 'back', href: `#/course/${courseId}/forum/${cmid}` }, '‹ ', S.backToForum);
-    const showError = (text) => { if (here()) clear(detailPane).append(back(), h('p', { class: 'error' }, text)); };
+    const flashText = { sent: S.replySent, unknown: S.unconfirmed }[flash] || '';
+    const showError = (text) => {
+      if (!here()) return;
+      clear(detailPane).append(back(),
+        ...(flashText ? [h('p', { class: `banner flash flash-${flash}`, role: 'status' }, flashText)] : []),
+        h('p', { class: 'error' }, text));
+    };
     const token = () => (auth.getSession() || session).token;
     const draftKey = (postId) => `forum.${postId}`;
     // This topic's entry from the cached first page of its forum (best effort: only used for title and canreply/locked).
@@ -839,7 +852,7 @@ export function createApp({
       clear(detailPane).append(renderTopic({
         courseId, cmid, posts, discussion,
         title: (discussion && discussion.title) || (first && first.subject) || '',
-        fresh: flags.fresh, offline: flags.offline, locale, token: token(), flash: flags.fresh ? flash : '',
+        fresh: flags.fresh, offline: flags.offline, locale, token: token(), flash,
         draftOf: (id) => { const d = drafts.get(draftKey(id)); return d ? d.text : ''; },
         onDraft: (id, text) => { if (text.trim()) drafts.set(draftKey(id), text); else drafts.remove(draftKey(id)); },
         actions: { send: sendReply },
@@ -872,8 +885,8 @@ export function createApp({
       return;
     }
     if (handleFatal(r.e)) return;
-    if (savedPosts) { if (here()) paint(savedPosts, { fresh: false, offline: true }); return; }
-    showError(describeError(r.e));
+    if (savedPosts && r.e.code === 'network') { if (here()) paint(savedPosts, { fresh: false, offline: true }); return; }
+    showError(moodleText(r.e));
   }
 
   async function showRoute() {

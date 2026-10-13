@@ -1301,3 +1301,58 @@ test('forum drafts are removed at sign-out', async () => {
   app.logout();
   assert.equal(drafts.get('forum.501'), null);
 });
+
+test('Final review: when the reload after a reply fails, the sent / could-not-confirm message is still shown', async () => {
+  for (const [send, expected] of [
+    [async () => { throw new MoodleError('network'); }, /Could not confirm/],
+    [async () => ({ postid: 999, warnings: [] }), /Reply sent/],
+  ]) {
+    let failing = false;
+    const { app, root, win } = setup({
+      getDiscussionPosts: async () => { if (failing) throw new MoodleError('network'); return samplePosts; },
+      addDiscussionPost: send,
+    }, true);
+    await app.start();
+    await goForum(app, win, '#/course/11/forum/7/topic/101');
+    failing = true; // the reload after sending cannot reach Aules
+    await sendReply(root);
+    const pane = root.querySelector('.pane-detail');
+    assert.match(pane.querySelector('.flash').textContent, expected);
+    assert.match(pane.querySelector('.error').textContent, /Cannot reach Aules/);
+  }
+});
+
+test('Final review: a Moodle refusal is shown as Moodle sent it, not as "offline" or an empty forum', async () => {
+  const deny = () => { throw new MoodleError('nopermission', 'No access to this forum'); };
+  const a = setup({ getForumDiscussions: async () => deny() }, true);
+  await a.app.start();
+  await goForum(a.app, a.win, '#/course/11/forum/7');
+  const t1 = a.root.querySelector('.pane-detail').textContent;
+  assert.match(t1, /No access to this forum/);
+  assert.doesNotMatch(t1, /Offline|No topics yet/);
+
+  const b = setup({ getForums: async () => deny() }, true);
+  b.cache.set('forums:11', sampleForums);
+  b.cache.set('topics:31:0', sampleDiscussions);
+  await b.app.start();
+  await goForum(b.app, b.win, '#/course/11/forum/7');
+  const t2 = b.root.querySelector('.pane-detail').textContent;
+  assert.match(t2, /No access to this forum/);
+  assert.doesNotMatch(t2, /Offline/);
+
+  const c = setup({ getDiscussionPosts: async () => deny() }, true);
+  c.cache.set('posts:101', samplePosts);
+  await c.app.start();
+  await goForum(c.app, c.win, '#/course/11/forum/7/topic/101');
+  const t3 = c.root.querySelector('.pane-detail').textContent;
+  assert.match(t3, /No access to this forum/);
+  assert.equal(c.root.querySelectorAll('.pane-detail .reply-btn').length, 0);
+});
+
+test('Final review: offline with a saved forum list that lacks this forum shows the network error, not "not found"', async () => {
+  const { app, root, win, cache } = setup({ getForums: async () => { throw new MoodleError('network'); } }, true);
+  cache.set('forums:11', [sampleForums[1]]);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7');
+  assert.match(root.querySelector('.pane-detail .error').textContent, /Cannot reach Aules/);
+});

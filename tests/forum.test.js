@@ -94,3 +94,13 @@ test('canReply needs the post capability, a live post and an open topic', () => 
   assert.equal(canReply(p, { locked: false, canReply: true }), true);
   assert.equal(canReply(p, null), true);
 });
+
+test('Final review: attachments are accepted with the real Moodle field name (url) as well as fileurl', () => {
+  const p = parsePosts({ posts: [{ id: 1, attachments: [
+    { filename: 'a.pdf', url: 'https://aules.edu.gva.es/fpa/pluginfile.php/9/mod_forum/attachment/1/a.pdf' },
+    { filename: 'b.pdf', fileurl: 'https://aules.edu.gva.es/fpa/webservice/pluginfile.php/9/mod_forum/attachment/1/b.pdf' },
+    { filename: 'c.pdf' },
+  ] }] });
+  assert.deepEqual(p[0].attachments.map((a) => a.name), ['a.pdf', 'b.pdf']);
+  assert.match(p[0].attachments[0].url, /pluginfile\.php\/9/);
+});

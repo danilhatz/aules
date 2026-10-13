@@ -1,7 +1,7 @@
 import { h } from './dom.js';
 import { STRINGS as S } from '../strings.js';
 import { describeError } from '../errors.js';
-import { sanitizeHtml } from '../sanitize.js';
+import { sanitizeHtml, isSafeHttpUrl } from '../sanitize.js';
 import { withToken, toWebserviceUrl } from '../content.js';
 import { buildThread, canReply } from '../forum.js';
 
@@ -108,6 +108,7 @@ export function renderTopic(p) {
   function postEl({ post, depth, replyTo }) {
     const body = h('div', { class: 'html message' });
     if (!post.deleted) body.innerHTML = sanitizeHtml(post.messageHtml, { rewriteUrl });
+    const files = post.attachments.map((a) => ({ name: a.name, href: rewriteUrl(a.url) })).filter((a) => isSafeHttpUrl(a.href));
     const showSubject = post.subject && !/^re:/i.test(post.subject) && post.subject !== p.title;
     const el = h('article', { class: `post depth-${depth}`, 'data-id': String(post.id) },
       h('header', { class: 'post-head' },
@@ -116,9 +117,9 @@ export function renderTopic(p) {
       showSubject ? h('h4', {}, post.subject) : null,
       replyTo ? h('small', { class: 'muted' }, S.inReplyTo.replace('{name}', replyTo)) : null,
       post.deleted ? h('p', { class: 'note' }, S.postRemoved) : body,
-      !post.deleted && post.attachments.length
-        ? h('ul', { class: 'links' }, post.attachments.map((a) => h('li', {},
-          h('a', { href: withToken(a.url, p.token), target: '_blank', rel: 'noopener noreferrer' }, a.name))))
+      !post.deleted && files.length
+        ? h('ul', { class: 'links' }, files.map((a) => h('li', {},
+          h('a', { href: a.href, target: '_blank', rel: 'noopener noreferrer' }, a.name))))
         : null);
     if (replyAllowed && canReply(post, p.discussion)) {
       const box = replyBlock(post);

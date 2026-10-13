@@ -28,3 +28,10 @@ test('forum screens have styles: topic rows, thread indentation up to depth 3, r
     assert.ok(css.includes(sel), sel);
   }
 });
+
+test('Final review: long words, wide tables and pre blocks in forum posts cannot widen the page', () => {
+  assert.match(css, /\.post\s*\{[^}]*min-width:\s*0/);
+  assert.match(css, /\.topic\s*\{[^}]*min-width:\s*0/);
+  assert.match(css, /\.topic\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.post \.html pre[^{]*\{[^}]*overflow-x:\s*auto/);
+});

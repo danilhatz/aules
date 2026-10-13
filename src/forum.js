@@ -40,8 +40,8 @@ export function parsePosts(resp) {
       deleted: p.isdeleted === true,
       canReply: Boolean(p.capabilities && p.capabilities.reply),
       attachments: (Array.isArray(p.attachments) ? p.attachments : [])
-        .filter((a) => a && str(a.filename) && str(a.fileurl))
-        .map((a) => ({ name: a.filename, url: a.fileurl })),
+        .map((a) => ({ name: str(a && a.filename), url: str(a && a.fileurl) || str(a && a.url) }))
+        .filter((a) => a.name && a.url),
     }));
 }
 
