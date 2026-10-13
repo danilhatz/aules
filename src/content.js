@@ -15,6 +15,17 @@ export function withToken(url, token) {
   return u.toString();
 }
 
+const PLAIN_PREFIX = `${SITE.pathname}/pluginfile.php/`;
+
+// Moodle hands out plain /pluginfile.php/ image URLs in some responses; the token only works on the webservice path.
+export function toWebserviceUrl(url) {
+  let u;
+  try { u = new URL(url); } catch { return url; }
+  if (u.origin !== SITE.origin || !u.pathname.startsWith(PLAIN_PREFIX)) return url;
+  u.pathname = FILE_PREFIX + u.pathname.slice(PLAIN_PREFIX.length);
+  return u.toString();
+}
+
 const hasText = (html) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() !== '';
 
 function fileLinks(files, token, labelOf) {

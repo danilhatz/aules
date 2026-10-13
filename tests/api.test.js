@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestToken, getSiteInfo, getCourses, getCourseContents, MoodleError } from '../src/api.js';
+import { requestToken, getSiteInfo, getCourses, getCourseContents, getCoursesByTimeline, getCategories, MoodleError } from '../src/api.js';
 import { describeError } from '../src/errors.js';
 
 const ok = (payload, calls = []) => async (url, opts) => {
@@ -72,4 +72,24 @@ test('describeError maps known codes and falls back with the code shown', () => 
   assert.match(describeError(new MoodleError('invalidlogin')), /Wrong user number/);
   assert.match(describeError(new MoodleError('weird_code')), /Something went wrong.*weird_code/);
   assert.match(describeError(new Error('x')), /Something went wrong/);
+});
+
+test('getCoursesByTimeline requests all courses without a limit', async () => {
+  const calls = [];
+  const r = await getCoursesByTimeline('tok', { fetchImpl: ok({ courses: [{ id: 1 }] }, calls) });
+  assert.deepEqual(r, { courses: [{ id: 1 }] });
+  const b = new URLSearchParams(calls[0].opts.body.toString());
+  assert.equal(b.get('wsfunction'), 'core_course_get_enrolled_courses_by_timeline_classification');
+  assert.equal(b.get('classification'), 'all');
+  assert.equal(b.get('limit'), '0');
+});
+
+test('getCategories sends the ids criteria as a comma list', async () => {
+  const calls = [];
+  await getCategories('tok', [3, 5, 8], { fetchImpl: ok([{ id: 3, name: 'A' }], calls) });
+  const b = new URLSearchParams(calls[0].opts.body.toString());
+  assert.equal(b.get('wsfunction'), 'core_course_get_categories');
+  assert.equal(b.get('criteria[0][key]'), 'ids');
+  assert.equal(b.get('criteria[0][value]'), '3,5,8');
+  assert.equal(b.get('addsubcategories'), '0');
 });

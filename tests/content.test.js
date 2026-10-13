@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withToken, buildCourse } from '../src/content.js';
+import { withToken, buildCourse, toWebserviceUrl } from '../src/content.js';
 import { sampleSections } from './fixtures.js';
 
 const F = 'https://aules.edu.gva.es/fpa/webservice/pluginfile.php';
@@ -69,4 +69,14 @@ test('token is only added for this Moodle instance\'s webservice pluginfile path
   assert.equal(withToken('https://aules.edu.gva.es/eso/webservice/pluginfile.php/1/a.png', 'T'), 'https://aules.edu.gva.es/eso/webservice/pluginfile.php/1/a.png');
   assert.equal(withToken('https://aules.edu.gva.es/fpa/pluginfile.php/1/a.png', 'T'), 'https://aules.edu.gva.es/fpa/pluginfile.php/1/a.png');
   assert.equal(withToken('https://aules.edu.gva.es/fpa/webservice/pluginfile.php/1/a.png', 'T'), 'https://aules.edu.gva.es/fpa/webservice/pluginfile.php/1/a.png?token=T');
+});
+
+test('toWebserviceUrl rewrites only this instance\'s plain pluginfile URLs', () => {
+  const S = 'https://aules.edu.gva.es/fpa';
+  assert.equal(toWebserviceUrl(`${S}/pluginfile.php/5/course/overviewfiles/a.png`), `${S}/webservice/pluginfile.php/5/course/overviewfiles/a.png`);
+  assert.equal(toWebserviceUrl(`${S}/pluginfile.php/5/a.png?x=1`), `${S}/webservice/pluginfile.php/5/a.png?x=1`);
+  assert.equal(toWebserviceUrl(`${S}/webservice/pluginfile.php/5/a.png`), `${S}/webservice/pluginfile.php/5/a.png`);
+  assert.equal(toWebserviceUrl('https://aules.edu.gva.es/eso/pluginfile.php/5/a.png'), 'https://aules.edu.gva.es/eso/pluginfile.php/5/a.png');
+  assert.equal(toWebserviceUrl('https://evil.example/fpa/pluginfile.php/5/a.png'), 'https://evil.example/fpa/pluginfile.php/5/a.png');
+  assert.equal(toWebserviceUrl('not a url'), 'not a url');
 });
