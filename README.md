@@ -20,7 +20,16 @@ Open an Exercise from a course to read the instructions, see the due date and st
 - Your typed text is kept on the phone while you write (and removed on sign out), so leaving the screen does not lose it.
 - File and photo upload depends on your school's settings. Run **Diagnostics -> Test upload** once; it sends one tiny dummy file to your own draft area (nothing is submitted) and records whether uploads work. The file picker only appears after that test has succeeded.
 
-Still to come: quizzes and forums (they show "Coming soon" in courses).
+## Quizzes
+
+Take simple quizzes (multiple choice, true/false, short answer and numeric questions) and review finished attempts.
+
+- **Start attempt** only appears when the app can finish the quiz. Quizzes that need a password, use other question types or have special access rules show why and an **Open in Aules** link instead, so you can never use up an attempt on a quiz the app can't complete.
+- Starting and finishing both ask you to confirm. Nothing is sent automatically, not even when the timer reaches zero (the page locks and a **Submit now** button appears).
+- Your answers are also kept on the phone while you work, and removed when you finish or sign out.
+- If the connection drops while saving or finishing, the app reloads and tells you it could not confirm instead of guessing.
+
+Still to come: forums (they show "Coming soon" in courses).
 
 ## Run locally
 

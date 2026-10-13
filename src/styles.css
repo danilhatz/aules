@@ -145,3 +145,5 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .timer { position: sticky; top: 0; z-index: 2; margin: 0 16px 10px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-weight: 700; }
 .attempt-bar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--border); }
 .attempt-bar .btn { flex: 1 1 100px; margin-top: 0; }
+.que fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.que legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
