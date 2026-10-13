@@ -23,6 +23,7 @@ const SHELL = [
   "./src/storage.js",
   "./src/store.js",
   "./src/strings.js",
+  "./src/submit.js",
   "./src/styles.css",
   "./src/vault.js",
   "./src/ui/course.js",
