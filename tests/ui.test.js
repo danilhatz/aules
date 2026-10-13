@@ -204,3 +204,11 @@ test('assign modules link to the assignment route and show a due date when known
   const none = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T' });
   assert.equal(none.querySelector('small.due'), null);
 });
+
+test('a course page that is being refreshed shows a small Updating note', () => {
+  const sections = buildCourse(sampleSections, 'T');
+  const on = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T', refreshing: true });
+  assert.match(on.querySelector('.refreshing').textContent, /Updating/);
+  const off = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T' });
+  assert.equal(off.querySelector('.refreshing'), null);
+});

@@ -47,7 +47,7 @@ function renderSection(s, open, opts, ctx) {
     h('ul', { class: 'modules' }, s.modules.map((m) => renderModule(m, opts, ctx))));
 }
 
-export function renderCourse({ course, token, offline, dues, now, locale }) {
+export function renderCourse({ course, token, offline, refreshing, dues, now, locale }) {
   const opts = { rewriteUrl: (u) => withToken(u, token) };
   const ctx = { courseId: course.id, dues, now, locale };
   const firstOpen = course.sections.findIndex((s) => s.modules.length);
@@ -58,5 +58,6 @@ export function renderCourse({ course, token, offline, dues, now, locale }) {
     h('header', { class: 'bar' }, renderBack(), h('h2', {}, course.fullname)),
     typeof course.progress === 'number' ? h('progress', { class: 'course-progress', max: 100, value: Math.round(course.progress) }) : null,
     offline ? h('p', { class: 'banner' }, S.offline) : null,
+    refreshing ? h('p', { class: 'banner refreshing' }, S.updating) : null,
     body);
 }

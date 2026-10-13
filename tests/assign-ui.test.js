@@ -387,3 +387,11 @@ test('an automatically restored draft is ignored when the server text is formatt
   assert.notEqual(el.querySelector('textarea').value, 'borrador');
   el.remove();
 });
+
+test('while the status is being re-checked the form is hidden and the last known answer is shown read-only', () => {
+  const { el } = mk({ editability: { editable: false, reason: 'updating' } });
+  assert.equal(el.querySelector('form'), null);
+  assert.match(el.querySelector('.note').textContent, /Checking for changes/);
+  assert.match(el.querySelector('.submission').textContent, /mi respuesta/);
+  el.remove();
+});

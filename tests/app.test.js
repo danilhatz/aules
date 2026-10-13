@@ -517,3 +517,213 @@ test('Test upload: an expired session does not mark uploads as unavailable, and 
   await settle();
   assert.equal(b.cache.get('uploadOk'), null);
 });
+
+// ---------- performance: parallel requests, saved data first, no heavy call on the critical path ----------
+const gateOf = () => { let release; const promise = new Promise((r) => { release = r; }); return [promise, release]; };
+const rawStatus42 = sampleStatusResponse;
+const assigns11 = () => sampleAssignmentsResponse.courses[0].assignments;
+
+test('Exercise page: with the assignment cached, the status request starts at once instead of waiting for the list', async () => {
+  const [listGate, releaseList] = gateOf();
+  let statusCalls = 0;
+  const { app, win, cache } = setup({
+    getAssignments: async () => { await listGate; return sampleAssignmentsResponse; },
+    getSubmissionStatus: async () => { statusCalls += 1; return rawStatus42; },
+  }, true);
+  cache.set('assigns:11', assigns11());
+  await app.start();
+  win.location.hash = '#/course/11/assign/9';
+  await tick(); await tick();
+  assert.equal(statusCalls, 1); // already asked, while the assignments list is still pending
+  releaseList();
+  await settle();
+});
+
+test('Exercise page: cached instructions show immediately, the form stays locked until the fresh status arrives', async () => {
+  const [gate, release] = gateOf();
+  const { app, root, win, cache } = setup({
+    getAssignments: async () => { await gate; return sampleAssignmentsResponse; },
+    getSubmissionStatus: async () => { await gate; return rawStatus42; },
+  }, true);
+  cache.set('assigns:11', assigns11());
+  cache.set('status:42', rawStatus42);
+  await app.start();
+  win.location.hash = '#/course/11/assign/9';
+  await tick(); await tick();
+  assert.equal(root.querySelector('.pane-detail h2').textContent, 'Tarea 1');
+  assert.match(root.querySelector('.pane-detail').textContent, /Escribe un párrafo/);
+  assert.equal(root.querySelector('.pane-detail form'), null); // locked while verifying
+  assert.match(root.querySelector('.pane-detail .note').textContent, /Checking for changes/);
+  assert.match(root.querySelector('.pane-detail').textContent, /Mi ciudad es bonita/); // last known answer is visible
+  release();
+  await settle();
+  assert.ok(root.querySelector('.pane-detail form'));
+  assert.equal(root.querySelector('.pane-detail textarea').value, 'Mi ciudad es bonita.');
+});
+
+test('Exercise page: the fresh status is cached for next time and a slow site-info call never blocks the form', async () => {
+  const [siteGate, releaseSite] = gateOf();
+  let siteCalls = 0;
+  const { app, root, win, cache } = setup({
+    getSiteInfo: async () => { siteCalls += 1; await siteGate; return { usermaxuploadfilesize: 5000000 }; },
+  }, true);
+  cache.set('uploadOk', true);
+  await app.start();
+  await goAssign(app, win);
+  assert.ok(root.querySelector('.pane-detail form')); // rendered although getSiteInfo is still pending
+  assert.ok(root.querySelector('input[type=file]'));
+  assert.equal(siteCalls, 1);
+  assert.ok(cache.get('status:42'));
+  releaseSite();
+  await settle();
+  assert.equal(cache.get('siteMax').data, 5000000);
+  await goAssign(app, win);
+  assert.equal(siteCalls, 1); // remembered for a day, not asked again
+});
+
+test('after saving, the screen is not painted from the now-outdated cached status', async () => {
+  const [gate, release] = gateOf();
+  let statusCalls = 0;
+  const { app, root, win } = setup({
+    getSubmissionStatus: async () => { statusCalls += 1; if (statusCalls > 1) await gate; return rawStatus42; },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/assign/9'; // navigate like a user: one load, which fills the saved copy
+  await settle();
+  root.querySelector('textarea').value = 'cambio';
+  clickBtn(root, 'Save draft');
+  await tick(); await tick(); await tick();
+  // the second status request is pending; the old saved status must not be shown meanwhile
+  assert.equal(statusCalls, 2);
+  assert.equal(root.querySelector('.pane-detail .assign'), null);
+  assert.ok(root.querySelector('.pane-detail .status'));
+  release();
+  await settle();
+  assert.match(root.querySelector('.flash').textContent, /Draft saved/);
+});
+
+test('Course page: contents and due dates are requested together, and cached content shows at once', async () => {
+  const [gate, release] = gateOf();
+  const started = [];
+  const { app, root, win, cache } = setup({
+    getCourseContents: async () => { started.push('contents'); await gate; return sampleSections; },
+    getAssignments: async () => { started.push('assignments'); await gate; return sampleAssignmentsResponse; },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11';
+  await tick(); await tick();
+  assert.deepEqual(started.sort(), ['assignments', 'contents']); // both in flight, neither waited for the other
+  release();
+  await settle();
+  assert.ok(root.querySelector('.pane-detail details.unit'));
+
+  // second visit: cached content is on screen before the network answers
+  const [gate2, release2] = gateOf();
+  const b = setup({
+    getCourseContents: async () => { await gate2; return sampleSections; },
+    getAssignments: async () => { await gate2; return sampleAssignmentsResponse; },
+  }, true);
+  b.cache.set('course:11', sampleSections);
+  b.cache.set('assigns:11', assigns11());
+  await b.app.start();
+  b.win.location.hash = '#/course/11';
+  await tick(); await tick();
+  assert.ok(b.root.querySelector('.pane-detail details.unit'));
+  assert.ok(b.root.querySelector('.pane-detail .refreshing'));
+  assert.ok(b.root.querySelector('a.assign-link'));
+  release2();
+  await settle();
+  assert.equal(b.root.querySelector('.pane-detail .refreshing'), null);
+});
+
+test('Course page: when the fresh content differs from the saved copy, the screen updates', async () => {
+  const [gate, release] = gateOf();
+  const changed = [{ ...sampleSections[0], name: 'Introducción nueva' }, sampleSections[1]];
+  const { app, root, win, cache } = setup({
+    getCourseContents: async () => { await gate; return changed; },
+  }, true);
+  cache.set('course:11', sampleSections);
+  await app.start();
+  win.location.hash = '#/course/11';
+  await tick(); await tick();
+  assert.ok(!/Introducción nueva/.test(root.querySelector('.pane-detail').textContent));
+  release();
+  await settle();
+  assert.match(root.querySelector('.pane-detail').textContent, /Introducción nueva/);
+});
+
+test('Course page: with saved content and a failing network it stays on screen with the offline note', async () => {
+  const { app, root, win, cache } = setup({ getCourseContents: async () => { throw new MoodleError('network'); } }, true);
+  cache.set('course:11', sampleSections);
+  await app.start();
+  win.location.hash = '#/course/11';
+  await settle();
+  assert.ok(root.querySelector('.pane-detail details.unit'));
+  assert.ok(root.querySelector('.pane-detail .banner'));
+  assert.equal(root.querySelector('.pane-detail .refreshing'), null);
+});
+
+test('App launch: saved courses appear immediately and are refreshed in the background', async () => {
+  const [gate, release] = gateOf();
+  const { app, root, cache } = setup({
+    getCoursesByTimeline: async () => { await gate; return { courses: [
+      { id: 11, fullname: 'Programació', shortname: 'PRG', coursecategory: '' },
+      { id: 12, fullname: 'Sistemes', shortname: 'SI', coursecategory: '' },
+      { id: 13, fullname: 'Nuevo curso', shortname: 'NC', coursecategory: '' },
+    ] }; },
+  }, true);
+  cache.set('courses', sampleCourses);
+  const started = app.start();
+  await tick(); await tick();
+  assert.equal(root.querySelectorAll('a.card').length, 2); // from the saved copy, network still pending
+  release();
+  await started;
+  assert.equal(root.querySelectorAll('a.card').length, 3);
+  assert.equal(cache.get('courses').data.length, 3);
+});
+
+test('App launch: an expired token while refreshing in the background still signs out cleanly', async () => {
+  const { app, root, cache } = setup({ getCoursesByTimeline: async () => { throw new MoodleError('invalidtoken'); }, getCourses: async () => { throw new MoodleError('invalidtoken'); } }, true);
+  cache.set('courses', sampleCourses);
+  await app.start();
+  assert.ok(root.querySelector('form.login-card'));
+});
+
+test('several requests hitting an expired token share one silent renewal instead of logging in once each', async () => {
+  let tokenRequests = 0;
+  let expired = true;
+  const { app, root, win, vault } = setup({
+    requestToken: async () => { tokenRequests += 1; expired = false; return 'fresh'; },
+    getCourseContents: async (token) => { if (expired && token === 'tok') throw new MoodleError('invalidtoken'); return sampleSections; },
+    getAssignments: async (token) => { if (expired && token === 'tok') throw new MoodleError('invalidtoken'); return sampleAssignmentsResponse; },
+    getCourses: async () => sampleCourses,
+  }, true);
+  await vault.save('u', 'pw');
+  await app.start();
+  tokenRequests = 0;
+  win.location.hash = '#/course/11';
+  await settle();
+  assert.equal(tokenRequests, 1);
+  assert.ok(root.querySelector('.pane-detail details.unit'));
+});
+
+test('Diagnostics lists the slowest API calls of this session', async () => {
+  const { createTimings } = await import('../src/timings.js');
+  const timings = createTimings();
+  const dom = setupDom();
+  const storage = createMemoryStorage();
+  const base = {
+    requestToken: async () => 'tok', getSiteInfo: async () => ({ userid: 7 }), getCourses: async () => sampleCourses,
+    getCourseContents: async () => sampleSections, getAssignments: async () => sampleAssignmentsResponse,
+  };
+  const api = timings.wrap(base);
+  const app = createApp({
+    root: document.getElementById('app'), api, auth: createAuth({ storage, api: base }), cache: createCache(storage), win: dom.window, timings,
+  });
+  storage.setItem('aules.session', JSON.stringify({ token: 'tok', userid: 7, fullname: 'Ana' }));
+  await app.start();
+  dom.window.location.hash = '#/diagnostics';
+  await app.showRoute();
+  await settle();
+  assert.match(document.querySelector('pre.report').textContent, /Call timings \(slowest first\):\n  \w+: \d+ ms/);
+});
