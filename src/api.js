@@ -114,3 +114,57 @@ export async function uploadDraftFile(token, file, { itemid = 0, fetchImpl } = {
   if (!first || first.itemid == null) throw new MoodleError('badresponse');
   return { itemid: first.itemid, filename: first.filename };
 }
+
+export const getQuizzes = (token, courseId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_quizzes_by_courses', { 'courseids[0]': courseId }, fetchImpl);
+
+export const getQuizAccess = (token, quizId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_quiz_access_information', { quizid: quizId }, fetchImpl);
+
+export const getAttemptAccess = (token, quizId, attemptId = 0, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_attempt_access_information', { quizid: quizId, attemptid: attemptId }, fetchImpl);
+
+export const getQuizQtypes = (token, quizId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_quiz_required_qtypes', { quizid: quizId }, fetchImpl);
+
+export const getUserAttempts = (token, quizId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_user_attempts', { quizid: quizId, status: 'all', includepreviews: 0 }, fetchImpl);
+
+export const getBestGrade = (token, quizId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_user_best_grade', { quizid: quizId }, fetchImpl);
+
+export const getAttemptData = (token, attemptId, page, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_attempt_data', { attemptid: attemptId, page }, fetchImpl);
+
+export const getAttemptSummary = (token, attemptId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_attempt_summary', { attemptid: attemptId }, fetchImpl);
+
+export const getAttemptReview = (token, attemptId, { fetchImpl } = {}) =>
+  ws(token, 'mod_quiz_get_attempt_review', { attemptid: attemptId, page: -1 }, fetchImpl);
+
+function throwOnResultWarnings(result) {
+  const w = result && Array.isArray(result.warnings) && result.warnings[0];
+  if (w) throw new MoodleError(w.warningcode || 'warning', w.message || w.warningcode || 'warning');
+}
+
+export async function startAttempt(token, quizId, { fetchImpl } = {}) {
+  const r = await ws(token, 'mod_quiz_start_attempt', { quizid: quizId }, fetchImpl);
+  throwOnResultWarnings(r);
+  if (!r || !r.attempt) throw new MoodleError('warning');
+  return r;
+}
+
+export async function saveAttempt(token, attemptId, data, { fetchImpl } = {}) {
+  const r = await ws(token, 'mod_quiz_save_attempt', { attemptid: attemptId, ...flatten({ data }) }, fetchImpl);
+  throwOnResultWarnings(r);
+  if (!r || r.status !== true) throw new MoodleError('warning');
+  return r;
+}
+
+export async function processAttempt(token, attemptId, data, { finish = false, timeup = false, fetchImpl } = {}) {
+  const r = await ws(token, 'mod_quiz_process_attempt', {
+    attemptid: attemptId, finishattempt: finish ? 1 : 0, timeup: timeup ? 1 : 0, ...flatten({ data }),
+  }, fetchImpl);
+  throwOnResultWarnings(r);
+  return r;
+}

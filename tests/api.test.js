@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestToken, getSiteInfo, getCourses, getCourseContents, getCoursesByTimeline, getCategories, flatten, getAssignments, getSubmissionStatus, getUnusedDraftItemId, saveSubmission, submitForGrading, deleteDraftFiles, uploadDraftFile, MoodleError } from '../src/api.js';
+import { requestToken, getSiteInfo, getCourses, getCourseContents, getCoursesByTimeline, getCategories, flatten, getAssignments, getSubmissionStatus, getUnusedDraftItemId, saveSubmission, submitForGrading, deleteDraftFiles, uploadDraftFile, getQuizzes, getQuizAccess, getAttemptAccess, getQuizQtypes, getUserAttempts, getBestGrade, startAttempt, getAttemptData, saveAttempt, processAttempt, getAttemptSummary, getAttemptReview, MoodleError } from '../src/api.js';
 import { describeError } from '../src/errors.js';
 
 const ok = (payload, calls = []) => async (url, opts) => {
@@ -182,4 +182,70 @@ test('uploadDraftFile turns upload.php per-file errors (duplicate name, too big)
     (e) => e.code === 'filenameexist' && e.message === 'A file with that name already exists',
   );
   await assert.rejects(() => uploadDraftFile('t', file, { fetchImpl: ok([{ error: 'Too big' }]) }), (e) => e.code === 'uploaderror' && e.message === 'Too big');
+});
+
+test('quiz read calls send the right function and params', async () => {
+  const calls = [];
+  const f = (payload) => ok(payload, calls);
+  await getQuizzes('t', 11, { fetchImpl: f({ quizzes: [] }) });
+  await getQuizAccess('t', 3, { fetchImpl: f({}) });
+  await getAttemptAccess('t', 3, 0, { fetchImpl: f({}) });
+  await getAttemptAccess('t', 3, 9, { fetchImpl: f({}) });
+  await getQuizQtypes('t', 3, { fetchImpl: f({ questiontypes: [] }) });
+  await getUserAttempts('t', 3, { fetchImpl: f({ attempts: [] }) });
+  await getBestGrade('t', 3, { fetchImpl: f({}) });
+  await getAttemptData('t', 9, 2, { fetchImpl: f({ questions: [] }) });
+  await getAttemptSummary('t', 9, { fetchImpl: f({}) });
+  await getAttemptReview('t', 9, { fetchImpl: f({}) });
+  const b = calls.map(bodyOf);
+  assert.deepEqual(b.map((x) => x.get('wsfunction')), [
+    'mod_quiz_get_quizzes_by_courses', 'mod_quiz_get_quiz_access_information', 'mod_quiz_get_attempt_access_information',
+    'mod_quiz_get_attempt_access_information', 'mod_quiz_get_quiz_required_qtypes', 'mod_quiz_get_user_attempts',
+    'mod_quiz_get_user_best_grade', 'mod_quiz_get_attempt_data', 'mod_quiz_get_attempt_summary', 'mod_quiz_get_attempt_review',
+  ]);
+  assert.equal(b[0].get('courseids[0]'), '11');
+  assert.equal(b[1].get('quizid'), '3');
+  assert.equal(b[2].get('attemptid'), '0');
+  assert.equal(b[3].get('attemptid'), '9');
+  assert.equal(b[5].get('status'), 'all');
+  assert.equal(b[5].get('includepreviews'), '0');
+  assert.equal(b[7].get('attemptid'), '9');
+  assert.equal(b[7].get('page'), '2');
+  assert.equal(b[9].get('page'), '-1');
+});
+
+test('startAttempt returns the attempt and treats warnings or a missing attempt as failure', async () => {
+  const calls = [];
+  const r = await startAttempt('t', 3, { fetchImpl: ok({ attempt: { id: 9, state: 'inprogress' }, warnings: [] }, calls) });
+  assert.equal(r.attempt.id, 9);
+  assert.equal(bodyOf(calls[0]).get('wsfunction'), 'mod_quiz_start_attempt');
+  assert.equal(bodyOf(calls[0]).get('quizid'), '3');
+  await assert.rejects(() => startAttempt('t', 3, { fetchImpl: ok({ warnings: [{ warningcode: 'noattemptsleft', message: 'No attempts left' }] }) }), (e) => e.code === 'noattemptsleft' && e.message === 'No attempts left');
+  await assert.rejects(() => startAttempt('t', 3, { fetchImpl: ok({ warnings: [] }) }), (e) => e.code === 'warning');
+});
+
+test('saveAttempt and processAttempt flatten data pairs and check the result', async () => {
+  const data = [{ name: 'q5:1_answer', value: '2' }, { name: 'q5:1_:sequencecheck', value: '1' }];
+  const c1 = [];
+  await saveAttempt('t', 9, data, { fetchImpl: ok({ status: true, warnings: [] }, c1) });
+  const b1 = bodyOf(c1[0]);
+  assert.equal(b1.get('wsfunction'), 'mod_quiz_save_attempt');
+  assert.equal(b1.get('data[0][name]'), 'q5:1_answer');
+  assert.equal(b1.get('data[0][value]'), '2');
+  assert.equal(b1.get('data[1][name]'), 'q5:1_:sequencecheck');
+  await assert.rejects(() => saveAttempt('t', 9, data, { fetchImpl: ok({ status: false, warnings: [] }) }), (e) => e instanceof MoodleError);
+  await assert.rejects(() => saveAttempt('t', 9, data, { fetchImpl: ok({ status: true, warnings: [{ warningcode: 'x', message: 'bad' }] }) }), (e) => e.code === 'x');
+
+  const c2 = [];
+  const r = await processAttempt('t', 9, data, { fetchImpl: ok({ state: 'inprogress', warnings: [] }, c2) });
+  assert.equal(r.state, 'inprogress');
+  const b2 = bodyOf(c2[0]);
+  assert.equal(b2.get('wsfunction'), 'mod_quiz_process_attempt');
+  assert.equal(b2.get('finishattempt'), '0');
+  assert.equal(b2.get('timeup'), '0');
+  const c3 = [];
+  await processAttempt('t', 9, [], { finish: true, timeup: true, fetchImpl: ok({ state: 'finished', warnings: [] }, c3) });
+  assert.equal(bodyOf(c3[0]).get('finishattempt'), '1');
+  assert.equal(bodyOf(c3[0]).get('timeup'), '1');
+  await assert.rejects(() => processAttempt('t', 9, [], { finish: true, fetchImpl: ok({ warnings: [{ warningcode: 'attemptalreadyclosed', message: 'Closed' }] }) }), (e) => e.code === 'attemptalreadyclosed');
 });

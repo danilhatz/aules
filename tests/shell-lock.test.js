@@ -6,11 +6,11 @@ import { readShell, shellHash, checkLock } from '../tools/shell-hash.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
-test('the recorded shell hash matches the files: a changed app file cannot ship without bumping VERSION and re-locking', () => {
+test('app files only change together with a VERSION bump (they are served cache-first)', () => {
   const lock = JSON.parse(readFileSync(`${root}shell.lock.json`, 'utf8'));
   const { version } = readShell(root);
-  assert.equal(shellHash(root), lock.hash, 'App files changed. Bump VERSION in sw.js, then run: npm run lock-shell');
-  assert.equal(version, lock.version);
+  const result = checkLock({ lock, version, hash: shellHash(root) });
+  assert.ok(result.ok, result.error);
 });
 
 test('the hash covers file contents and ignores sw.js itself', () => {
