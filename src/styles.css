@@ -132,3 +132,16 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .note-box { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .link-btn { display: block; text-align: center; text-decoration: none; line-height: 48px; margin-top: 8px; }
 .start-block .btn, .start .btn { width: 100%; }
+
+.attempt .question { margin: 0 16px 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.attempt .que .info { color: var(--muted); font-size: 15px; }
+.attempt .que h3 { margin: 0 0 4px; font-size: 16px; }
+.attempt .que .answer > div { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; min-height: 44px; }
+.attempt .que input[type=radio], .attempt .que input[type=checkbox] { width: 24px; height: 24px; margin-top: 2px; flex: none; }
+.attempt .que input[type=text] { width: 100%; }
+.review .question { margin: 0 16px 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.review .que .correct, .attempt .que .correct { color: var(--accent); }
+.review .que .incorrect { color: var(--danger); }
+.timer { position: sticky; top: 0; z-index: 2; margin: 0 16px 10px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-weight: 700; }
+.attempt-bar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--border); }
+.attempt-bar .btn { flex: 1 1 100px; margin-top: 0; }

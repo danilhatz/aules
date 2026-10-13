@@ -31,6 +31,7 @@ const SHELL = [
   "./src/styles.css",
   "./src/vault.js",
   "./src/ui/assign.js",
+  "./src/ui/attempt.js",
   "./src/ui/course.js",
   "./src/ui/courses.js",
   "./src/ui/diagnostics.js",
