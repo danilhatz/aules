@@ -212,3 +212,19 @@ test('a course page that is being refreshed shows a small Updating note', () => 
   const off = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T' });
   assert.equal(off.querySelector('.refreshing'), null);
 });
+
+test('quiz modules link to the quiz route and show the closing time when known', () => {
+  const sections = buildCourse(sampleSections, 'T');
+  const NOW = 1785000000;
+  const el = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T', closes: { 10: NOW + 2 * 86400 }, now: NOW, locale: 'en' });
+  const link = el.querySelector('a.quiz-link');
+  assert.equal(link.getAttribute('href'), '#/course/11/quiz/10');
+  assert.equal(link.textContent, 'Test 1');
+  const mod = link.closest('li.mod');
+  assert.equal(mod.querySelector('.chip').textContent, 'Quiz');
+  assert.match(mod.querySelector('small.due').textContent, /in 2 days/);
+  const past = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T', closes: { 10: NOW - 3600 }, now: NOW, locale: 'en' });
+  assert.ok(past.querySelector('li.quiz small.due.overdue'));
+  const none = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T' });
+  assert.equal(none.querySelector('li.quiz small.due'), null);
+});

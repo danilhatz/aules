@@ -21,6 +21,13 @@ function chip(m) {
 
 function renderModule(m, opts, ctx) {
   if (m.kind === 'label') return h('li', { class: 'mod label' }, html('html', m.description, opts));
+  if (m.kind === 'quiz') {
+    const closes = ctx.closes && ctx.closes[m.id] ? formatDue(ctx.closes[m.id], ctx.now, ctx.locale) : null;
+    return h('li', { class: 'mod quiz' },
+      h('div', { class: 'mod-head' }, chip(m), h('a', { class: 'quiz-link', href: `#/course/${ctx.courseId}/quiz/${m.id}` }, m.name)),
+      closes && closes.has ? h('small', { class: closes.overdue ? 'due overdue' : 'due' }, `${closes.overdue ? S.closedLabel : S.closesLabel}: ${closes.relative} · ${closes.absolute}`) : null,
+      m.description ? html('html small', m.description, opts) : null);
+  }
   if (m.kind === 'assign') {
     const due = ctx.dues && ctx.dues[m.id] ? formatDue(ctx.dues[m.id], ctx.now, ctx.locale) : null;
     return h('li', { class: 'mod assign' },
@@ -47,9 +54,9 @@ function renderSection(s, open, opts, ctx) {
     h('ul', { class: 'modules' }, s.modules.map((m) => renderModule(m, opts, ctx))));
 }
 
-export function renderCourse({ course, token, offline, refreshing, dues, now, locale }) {
+export function renderCourse({ course, token, offline, refreshing, dues, closes, now, locale }) {
   const opts = { rewriteUrl: (u) => withToken(u, token) };
-  const ctx = { courseId: course.id, dues, now, locale };
+  const ctx = { courseId: course.id, dues, closes, now, locale };
   const firstOpen = course.sections.findIndex((s) => s.modules.length);
   const body = course.sections.length
     ? course.sections.map((s, i) => renderSection(s, i === firstOpen, opts, ctx))
