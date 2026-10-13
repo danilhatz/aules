@@ -13,6 +13,7 @@ export const STRINGS = {
   unsupported: 'Not available in this app yet',
   loading: 'Loading…',
   empty: 'No courses found',
+  uncategorised: 'Other courses',
   noContent: 'This course has no content',
   retry: 'Retry',
   pickCourse: 'Select a course',
