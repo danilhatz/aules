@@ -17,3 +17,8 @@ test('folders and units show an expand/collapse chevron (summary markers are rem
   assert.ok(css.includes('.unit > summary::after'));
   assert.ok(css.includes('[open] > summary::after'));
 });
+
+test('the login screen keeps its card and the language switch together in the vertical centre', () => {
+  const rule = /\.login\s*\{[^}]*\}/.exec(css)[0];
+  assert.match(rule, /align-content:\s*center/);
+});

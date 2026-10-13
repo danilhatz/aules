@@ -46,3 +46,8 @@ test('Ukrainian strings contain Cyrillic', () => {
     assert.match(v, /[Ѐ-ӿ]/, k);
   }
 });
+
+test('wording fixes from review: "discard" means throw away, "abandoned" means given up', () => {
+  assert.equal(uk.discard, 'Відкинути');
+  assert.equal(uk.quizStates.abandoned, 'Покинуто');
+});

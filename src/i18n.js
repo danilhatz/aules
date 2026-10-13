@@ -40,3 +40,14 @@ export function deviceStorage() {
     return null;
   }
 }
+
+// The language for dates and relative times: the phone's own regional tag (en-GB, uk-UA) when it matches the app language, else the bare code.
+export function localeFor(lang, navigatorLanguages) {
+  if (Array.isArray(navigatorLanguages)) {
+    for (const tag of navigatorLanguages) {
+      if (typeof tag !== 'string' || tag.toLowerCase().split('-')[0] !== lang) continue;
+      try { return Intl.getCanonicalLocales(tag)[0]; } catch { /* malformed tag: ignore */ }
+    }
+  }
+  return lang;
+}

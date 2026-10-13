@@ -65,3 +65,13 @@ test('storage that throws or is missing never breaks anything', () => {
 test('deviceStorage returns null where localStorage does not exist', () => {
   assert.equal(deviceStorage(), null);
 });
+
+test('localeFor keeps the phone region for dates when the language matches, else the bare language', async () => {
+  const { localeFor } = await import('../src/i18n.js');
+  assert.equal(localeFor('en', ['es-ES', 'en-GB']), 'en-GB');
+  assert.equal(localeFor('uk', ['uk-UA']), 'uk-UA');
+  assert.equal(localeFor('en', ['uk-UA']), 'en'); // user forced English on a Ukrainian phone
+  assert.equal(localeFor('uk', []), 'uk');
+  assert.equal(localeFor('en', undefined), 'en');
+  assert.equal(localeFor('en', ['en-@@@']), 'en'); // not a valid tag
+});

@@ -1,6 +1,6 @@
 import { en } from './lang/en.js';
 import { uk } from './lang/uk.js';
-import { resolveLanguage, readPreference, deviceStorage } from './i18n.js';
+import { resolveLanguage, readPreference, deviceStorage, localeFor } from './i18n.js';
 
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
@@ -20,3 +20,4 @@ export function buildStrings(lang, packs = { en, uk }) {
 const phone = globalThis.navigator && globalThis.navigator.languages;
 export const LANG = resolveLanguage(readPreference(deviceStorage()), Array.isArray(phone) ? phone : []);
 export const STRINGS = buildStrings(LANG);
+export const LOCALE = localeFor(LANG, phone);
