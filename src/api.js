@@ -168,3 +168,19 @@ export async function processAttempt(token, attemptId, data, { finish = false, t
   throwOnResultWarnings(r);
   return r;
 }
+
+export const getForums = (token, courseId, { fetchImpl } = {}) =>
+  ws(token, 'mod_forum_get_forums_by_courses', { 'courseids[0]': courseId }, fetchImpl);
+
+export const getForumDiscussions = (token, forumId, { page = 0, perpage = 20, fetchImpl } = {}) =>
+  ws(token, 'mod_forum_get_forum_discussions', { forumid: forumId, sortorder: -1, page, perpage }, fetchImpl);
+
+export const getDiscussionPosts = (token, discussionId, { fetchImpl } = {}) =>
+  ws(token, 'mod_forum_get_discussion_posts', { discussionid: discussionId, sortby: 'created', sortdirection: 'ASC' }, fetchImpl);
+
+export async function addDiscussionPost(token, postId, subject, message, { fetchImpl } = {}) {
+  const r = await ws(token, 'mod_forum_add_discussion_post', { postid: postId, subject, message }, fetchImpl);
+  throwOnResultWarnings(r);
+  if (!r || r.postid == null) throw new MoodleError('badresponse'); // reached Aules but the outcome is unclear
+  return r;
+}

@@ -1,4 +1,4 @@
-const VERSION = "v8";
+const VERSION = "v9";
 const CACHE = `aules-shell-${VERSION}`;
 const SHELL = [
   "./",

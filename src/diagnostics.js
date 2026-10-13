@@ -12,7 +12,7 @@ const CHECKS = [
   'core_course_get_enrolled_courses_by_timeline_classification', 'core_course_get_categories',
   'mod_assign_get_assignments', 'mod_assign_get_submission_status', 'mod_assign_save_submission', 'mod_assign_submit_for_grading', 'core_files_upload',
   'mod_quiz_get_quizzes_by_courses', 'mod_quiz_start_attempt', 'mod_quiz_get_attempt_data', 'mod_quiz_process_attempt',
-  'mod_forum_get_forum_discussions', 'mod_forum_add_discussion', 'mod_forum_add_discussion_post',
+  'mod_forum_get_forums_by_courses', 'mod_forum_get_forum_discussions', 'mod_forum_get_discussion_posts', 'mod_forum_add_discussion', 'mod_forum_add_discussion_post',
 ];
 
 export function shapeOf(v, depth = 0) {
