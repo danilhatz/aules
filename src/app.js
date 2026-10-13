@@ -21,6 +21,8 @@ import { describeError } from './errors.js';
 import { MoodleError } from './api.js';
 import { STRINGS as S, LOCALE } from './strings.js';
 import { renderLangSwitch } from './ui/langswitch.js';
+import { renderForum, renderTopic } from './ui/forum.js';
+import { parseForums, parseDiscussions, parsePosts, replySubject, replyHtml } from './forum.js';
 
 const assignmentsOf = (res) => (res && Array.isArray(res.courses) && res.courses[0] && Array.isArray(res.courses[0].assignments) ? res.courses[0].assignments : []);
 const safeCode = (c) => (typeof c === 'string' && /^[a-z][a-z_]{1,60}$/.test(c) ? c : 'error');
@@ -49,6 +51,7 @@ export function createApp({
   let renderId = 0; // newest showRoute wins; older in-flight loads must not paint
   let siteLimitPending = false;
   let pendingQuizFlash = null; // { key, kind }
+  let pendingForumFlash = null; // { key, kind }
   let renewing = null; // one shared silent renewal, however many requests hit an expired token at once
 
   const view = () => {
@@ -62,13 +65,19 @@ export function createApp({
     if (m) return { type: 'review', courseId: Number(m[1]), cmid: Number(m[2]), attemptId: Number(m[3]) };
     m = /^#\/course\/(\d+)\/quiz\/(\d+)$/.exec(hash);
     if (m) return { type: 'quiz', courseId: Number(m[1]), cmid: Number(m[2]) };
+    m = /^#\/course\/(\d+)\/forum\/([1-9]\d*)\/topic\/([1-9]\d*)$/.exec(hash);
+    if (m) return { type: 'topic', courseId: Number(m[1]), cmid: Number(m[2]), discussionId: Number(m[3]) };
+    m = /^#\/course\/(\d+)\/forum\/([1-9]\d*)$/.exec(hash);
+    if (m) return { type: 'forum', courseId: Number(m[1]), cmid: Number(m[2]) };
+    m = /^#\/course\/(\d+)\/forum\//.exec(hash); // malformed forum ids: show the course
+    if (m) return { type: 'course', id: Number(m[1]) };
     m = /^#\/course\/(\d+)$/.exec(hash);
     return m ? { type: 'course', id: Number(m[1]) } : { type: 'list' };
   };
   const route = () => {
     const v = view();
     if (v.type === 'course') return v.id;
-    return ['assign', 'quiz', 'attempt', 'review'].includes(v.type) ? v.courseId : null;
+    return ['assign', 'quiz', 'attempt', 'review', 'forum', 'topic'].includes(v.type) ? v.courseId : null;
   };
 
   function showLogin(message = '') {
@@ -87,6 +96,7 @@ export function createApp({
     drafts.clear();
     attemptStore.clear();
     pendingQuizFlash = null;
+    pendingForumFlash = null;
     courses = [];
     lastList = null;
     siteLimitPending = false;
@@ -701,6 +711,171 @@ export function createApp({
     }
   }
 
+  const FORUM_PAGE = 20;
+  const tryParse = (fn) => { try { return fn(); } catch { return null; } };
+
+  async function showForum(courseId, cmid, session, rid) {
+    const epoch = auth.epoch();
+    const here = () => { const v = view(); return v.type === 'forum' && v.cmid === cmid && rid === renderId && auth.epoch() === epoch; };
+    const back = () => h('a', { class: 'back', href: `#/course/${courseId}` }, '‹ ', S.backToCourse);
+    const showError = (text) => { if (here()) clear(detailPane).append(back(), h('p', { class: 'error' }, text)); };
+    const token = () => (auth.getSession() || session).token;
+    const findForum = (raw) => parseForums(raw).find((f) => f.cmid === cmid) || null;
+    const savedForums = cache.get(`forums:${courseId}`);
+    const savedForum = savedForums ? tryParse(() => findForum(savedForums.data)) : null;
+    const savedTopicsRaw = savedForum ? cache.get(`topics:${savedForum.id}:0`) : null;
+    const savedTopics = savedTopicsRaw ? tryParse(() => parseDiscussions(savedTopicsRaw.data)) : null;
+    let nextPage = 1;
+
+    const paint = (forum, topics, flags) => {
+      clear(detailPane).append(renderForum({
+        courseId, cmid, forum, topics, hasMore: flags.hasMore, fresh: flags.fresh, offline: flags.offline,
+        locale, token: token(),
+        actions: {
+          loadMore: async () => {
+            try {
+              const raw = await call((s) => api.getForumDiscussions(s.token, forum.id, { page: nextPage, perpage: FORUM_PAGE }));
+              if (auth.epoch() !== epoch) throw new MoodleError('signedout');
+              const more = parseDiscussions(raw);
+              nextPage += 1;
+              return { topics: more, hasMore: more.length >= FORUM_PAGE };
+            } catch (e) {
+              if (handleFatal(e)) throw new MoodleError('signedout');
+              throw e;
+            }
+          },
+        },
+      }));
+    };
+
+    if (savedForum && savedTopics) paint(savedForum, savedTopics, { hasMore: false, fresh: false, offline: false });
+    else clear(detailPane).append(h('p', { class: 'status' }, S.loading));
+
+    const forumsS = settle(call((s) => api.getForums(s.token, courseId)));
+    let topicsS = savedForum ? settle(call((s) => api.getForumDiscussions(s.token, savedForum.id, { page: 0, perpage: FORUM_PAGE }))) : null;
+
+    const fr = await forumsS;
+    if (auth.epoch() !== epoch) return;
+    let rawForums;
+    let offlineList = false;
+    if (fr.ok) {
+      rawForums = fr.v;
+    } else {
+      if (handleFatal(fr.e)) return;
+      if (!savedForums) { showError(describeError(fr.e)); return; }
+      rawForums = savedForums.data;
+      offlineList = true;
+    }
+    let forum;
+    try {
+      forum = findForum(rawForums);
+    } catch (e) {
+      showError(describeError(e));
+      return;
+    }
+    if (fr.ok) cache.set(`forums:${courseId}`, rawForums);
+    if (!forum) { showError(S.forumNotFound); return; }
+
+    const cachedTopics = () => {
+      const t = cache.get(`topics:${forum.id}:0`);
+      return (t && tryParse(() => parseDiscussions(t.data))) || [];
+    };
+    if (offlineList) {
+      if (here()) paint(forum, cachedTopics(), { hasMore: false, fresh: false, offline: true });
+      return;
+    }
+    if (!topicsS || (savedForum && savedForum.id !== forum.id)) {
+      topicsS = settle(call((s) => api.getForumDiscussions(s.token, forum.id, { page: 0, perpage: FORUM_PAGE })));
+    }
+    const tr = await topicsS;
+    if (auth.epoch() !== epoch) return;
+    if (tr.ok) {
+      let topics;
+      try {
+        topics = parseDiscussions(tr.v);
+      } catch (e) {
+        showError(describeError(e));
+        return;
+      }
+      cache.set(`topics:${forum.id}:0`, tr.v);
+      if (here()) paint(forum, topics, { hasMore: topics.length >= FORUM_PAGE, fresh: true, offline: false });
+      return;
+    }
+    if (handleFatal(tr.e)) return;
+    if (here()) paint(forum, cachedTopics(), { hasMore: false, fresh: false, offline: true });
+  }
+
+  async function showTopic(courseId, cmid, discussionId, session, rid) {
+    const epoch = auth.epoch();
+    const flashKey = `topic:${discussionId}`;
+    const flash = pendingForumFlash && pendingForumFlash.key === flashKey ? pendingForumFlash.kind : '';
+    pendingForumFlash = null;
+    const here = () => { const v = view(); return v.type === 'topic' && v.discussionId === discussionId && rid === renderId && auth.epoch() === epoch; };
+    const back = () => h('a', { class: 'back', href: `#/course/${courseId}/forum/${cmid}` }, '‹ ', S.backToForum);
+    const showError = (text) => { if (here()) clear(detailPane).append(back(), h('p', { class: 'error' }, text)); };
+    const token = () => (auth.getSession() || session).token;
+    const draftKey = (postId) => `forum.${postId}`;
+    // This topic's entry from the cached first page of its forum (best effort: only used for title and canreply/locked).
+    const discussionMeta = () => {
+      const f = cache.get(`forums:${courseId}`);
+      const forum = f && tryParse(() => parseForums(f.data).find((x) => x.cmid === cmid));
+      const t = forum && cache.get(`topics:${forum.id}:0`);
+      const list = t && tryParse(() => parseDiscussions(t.data));
+      return (list && list.find((x) => x.id === discussionId)) || null;
+    };
+
+    const sendReply = async (post, text) => {
+      const html = replyHtml(text);
+      if (!html) throw new MoodleError('nochanges');
+      const r = await sentOnce(() => guardedWrite(epoch)((s) => api.addDiscussionPost(s.token, post.id, replySubject(post.subject), html)));
+      if (auth.epoch() !== epoch) throw new MoodleError('signedout');
+      drafts.remove(draftKey(post.id)); // only a confirmed success discards the text
+      return r;
+    };
+
+    const paint = (posts, flags) => {
+      const discussion = discussionMeta();
+      const first = posts.find((p) => !p.parentId) || posts[0];
+      clear(detailPane).append(renderTopic({
+        courseId, cmid, posts, discussion,
+        title: (discussion && discussion.title) || (first && first.subject) || '',
+        fresh: flags.fresh, offline: flags.offline, locale, token: token(), flash: flags.fresh ? flash : '',
+        draftOf: (id) => { const d = drafts.get(draftKey(id)); return d ? d.text : ''; },
+        onDraft: (id, text) => { if (text.trim()) drafts.set(draftKey(id), text); else drafts.remove(draftKey(id)); },
+        actions: { send: sendReply },
+        onDone: (kind) => {
+          if (auth.epoch() !== epoch || !here()) return;
+          cache.remove(`posts:${discussionId}`); // the saved copy is outdated after our own reply (sent or not confirmed)
+          pendingForumFlash = { key: flashKey, kind };
+          showRoute();
+        },
+      }));
+    };
+
+    const saved = cache.get(`posts:${discussionId}`);
+    const savedPosts = saved ? tryParse(() => parsePosts(saved.data)) : null;
+    if (savedPosts) paint(savedPosts, { fresh: false, offline: false });
+    else clear(detailPane).append(h('p', { class: 'status' }, S.loading));
+
+    const r = await settle(call((s) => api.getDiscussionPosts(s.token, discussionId)));
+    if (auth.epoch() !== epoch) return;
+    if (r.ok) {
+      let posts;
+      try {
+        posts = parsePosts(r.v);
+      } catch (e) {
+        showError(describeError(e));
+        return;
+      }
+      cache.set(`posts:${discussionId}`, r.v);
+      if (here()) paint(posts, { fresh: true, offline: false });
+      return;
+    }
+    if (handleFatal(r.e)) return;
+    if (savedPosts) { if (here()) paint(savedPosts, { fresh: false, offline: true }); return; }
+    showError(describeError(r.e));
+  }
+
   async function showRoute() {
     const session = auth.getSession();
     if (!session || !shell) return;
@@ -730,6 +905,8 @@ export function createApp({
     if (v.type === 'quiz') { await showQuiz(v.courseId, v.cmid, session, rid); return; }
     if (v.type === 'attempt') { await showAttempt(v.courseId, v.cmid, v.attemptId, v.page, session, rid); return; }
     if (v.type === 'review') { await showReview(v.courseId, v.cmid, v.attemptId, session, rid); return; }
+    if (v.type === 'forum') { await showForum(v.courseId, v.cmid, session, rid); return; }
+    if (v.type === 'topic') { await showTopic(v.courseId, v.cmid, v.discussionId, session, rid); return; }
     if (v.type === 'course') {
       await showCourse(v.id, session, rid);
       return;

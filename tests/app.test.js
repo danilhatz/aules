@@ -4,6 +4,7 @@ import { setupDom } from './helpers/dom.js';
 import {
   sampleCourses, sampleSections, sampleAssignmentsResponse, sampleStatusResponse,
   sampleQuizzesResponse, sampleQuizAccess, sampleQtypes, sampleAttemptAccess, sampleNoAttempts, sampleBest, sampleAttemptPage, mcqHtml,
+  sampleForums, sampleDiscussions, samplePosts,
 } from './fixtures.js';
 import { MoodleError } from '../src/api.js';
 import { createMemoryStorage } from '../src/storage.js';
@@ -44,6 +45,10 @@ function setup(apiOverrides = {}, preloadSession = false) {
     processAttempt: async (t, id, data, o) => ({ state: o && o.finish ? 'finished' : 'inprogress', warnings: [] }),
     getAttemptSummary: async () => ({ questions: [{ slot: 1, state: 'complete' }, { slot: 2, state: 'todo' }] }),
     getAttemptReview: async () => ({ grade: '1.00', attempt: { id: 77 }, questions: [{ slot: 1, number: 1, type: 'multichoice', html: mcqHtml(5, 1) }], warnings: [] }),
+    getForums: async () => sampleForums,
+    getForumDiscussions: async () => sampleDiscussions,
+    getDiscussionPosts: async () => samplePosts,
+    addDiscussionPost: async () => ({ postid: 999, warnings: [] }),
     ...apiOverrides,
   };
   const vault = createVault({ storage, keyStore: createMemoryKeyStore() });
@@ -1115,4 +1120,184 @@ test('without an explicit locale the app formats dates in the active app languag
   const src = await (await import('node:fs/promises')).readFile(new URL('../src/app.js', import.meta.url), 'utf8');
   assert.match(src, /locale = LOCALE\b/);
   assert.doesNotMatch(src, /navigator\.language/);
+});
+
+const goForum = async (app, win, hash) => { win.location.hash = hash; await app.showRoute(); await settle(); };
+const sendReply = async (root, text = 'Hola\n<b>x</b>') => {
+  const post = root.querySelector('.post[data-id="501"]');
+  post.querySelector('.reply-btn').click();
+  post.querySelector('textarea').value = text;
+  post.querySelector('textarea').dispatchEvent(new window.Event('input'));
+  [...post.querySelectorAll('button')].find((b) => b.textContent === 'Send').click();
+  [...post.querySelectorAll('button')].find((b) => b.textContent === 'Yes, send').click();
+  await settle();
+};
+
+test('the forum route lists topics and links each one', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7');
+  assert.ok(root.querySelector('.shell.has-detail'));
+  assert.equal(root.querySelector('.pane-detail h2').textContent, 'Questions');
+  const links = [...root.querySelectorAll('.pane-detail a.topic-link')];
+  assert.deepEqual(links.map((a) => a.getAttribute('href')), ['#/course/11/forum/7/topic/101', '#/course/11/forum/7/topic/102']);
+  assert.equal(root.querySelector('.pane-detail a.back').getAttribute('href'), '#/course/11');
+});
+
+test('an unknown forum says it was not found; a bad id falls back to the course page', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/99');
+  assert.match(root.querySelector('.pane-detail .error').textContent, /forum was not found/);
+  await goForum(app, win, '#/course/11/forum/0/topic/101');
+  assert.ok(root.querySelector('.pane-detail .course'));
+  assert.equal(root.querySelector('.pane-detail article.forum'), null);
+  assert.equal(root.querySelector('.pane-detail article.topic'), null);
+});
+
+test('forum: saved topics appear at once and offline shows them without Load more', async () => {
+  const { app, root, win, cache } = setup({ getForums: async () => { throw new MoodleError('network'); } }, true);
+  cache.set('forums:11', sampleForums);
+  cache.set('topics:31:0', sampleDiscussions);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7');
+  assert.equal(root.querySelectorAll('.pane-detail a.topic-link').length, 2);
+  assert.match(root.querySelector('.pane-detail').textContent, /Offline/);
+});
+
+test('forum: a full first page offers Load more, which fetches page 1 and appends', async () => {
+  const calls = [];
+  const full = { discussions: Array.from({ length: 20 }, (_, i) => ({ id: i + 1, discussion: 200 + i, name: `T${i}`, userfullname: 'U', timemodified: 1, numreplies: 0, canreply: true })), warnings: [] };
+  const { app, root, win } = setup({
+    getForumDiscussions: async (t, id, o) => { calls.push(o.page); return o.page === 0 ? full : { discussions: [{ id: 99, discussion: 999, name: 'Last', userfullname: 'U', timemodified: 1, numreplies: 0 }], warnings: [] }; },
+  }, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7');
+  const btn = [...root.querySelectorAll('.pane-detail button')].find((b) => b.textContent === 'Load more');
+  assert.ok(btn);
+  const before = calls.length;
+  btn.click();
+  await settle();
+  assert.deepEqual(calls.slice(before), [1]);
+  assert.equal(root.querySelectorAll('.pane-detail a.topic-link').length, 21);
+  assert.equal([...root.querySelectorAll('.pane-detail button')].find((b) => b.textContent === 'Load more').hidden, true);
+});
+
+test('the topic route shows the thread with safe HTML and reply buttons on allowed posts', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7/topic/101');
+  assert.equal(root.querySelector('.pane-detail h2').textContent, 'Verb tenses');
+  assert.equal(root.querySelectorAll('.pane-detail .post').length, 3);
+  assert.equal(root.querySelectorAll('.pane-detail .reply-btn').length, 2);
+  assert.equal(root.querySelector('.pane-detail script'), null);
+  assert.equal(root.querySelector('.pane-detail a.back').getAttribute('href'), '#/course/11/forum/7');
+});
+
+test('topic: saved posts are read-only until fresh posts arrive', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { app, root, win, cache } = setup({ getDiscussionPosts: async () => { await gate; return samplePosts; } }, true);
+  cache.set('posts:101', samplePosts);
+  await app.start();
+  win.location.hash = '#/course/11/forum/7/topic/101';
+  app.showRoute();
+  await settle();
+  assert.equal(root.querySelectorAll('.pane-detail .post').length, 3);
+  assert.equal(root.querySelectorAll('.pane-detail .reply-btn').length, 0);
+  release();
+  await settle();
+  assert.equal(root.querySelectorAll('.pane-detail .reply-btn').length, 2);
+});
+
+test('reply: nothing is sent until Yes, send; then exactly one escaped reply is sent, the draft is removed and the topic reloads with a flash', async () => {
+  const sent = [];
+  let loads = 0;
+  const { app, root, win, drafts } = setup({
+    getDiscussionPosts: async () => { loads += 1; return samplePosts; },
+    addDiscussionPost: async (t, postId, subject, message) => { sent.push([postId, subject, message]); return { postid: 999, warnings: [] }; },
+  }, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7/topic/101');
+  const before = loads;
+  const post = root.querySelector('.post[data-id="501"]');
+  post.querySelector('.reply-btn').click();
+  post.querySelector('textarea').value = 'Hola\n<b>x</b>';
+  post.querySelector('textarea').dispatchEvent(new window.Event('input'));
+  assert.equal(drafts.get('forum.501').text, 'Hola\n<b>x</b>');
+  [...post.querySelectorAll('button')].find((b) => b.textContent === 'Send').click();
+  await settle();
+  assert.deepEqual(sent, []);
+  [...post.querySelectorAll('button')].find((b) => b.textContent === 'Yes, send').click();
+  await settle();
+  assert.deepEqual(sent, [[501, 'Re: Verb tenses', '<p>Hola</p><p>&lt;b&gt;x&lt;/b&gt;</p>']]);
+  assert.equal(drafts.get('forum.501'), null);
+  assert.equal(loads - before, 1); // exactly one reload after sending
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Reply sent/);
+});
+
+test('reply: a lost connection after sending is "could not confirm": reload, no replay, draft kept', async () => {
+  let attempts = 0;
+  let loads = 0;
+  const { app, root, win, drafts } = setup({
+    getDiscussionPosts: async () => { loads += 1; return samplePosts; },
+    addDiscussionPost: async () => { attempts += 1; throw new MoodleError('network'); },
+  }, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7/topic/101');
+  const before = loads;
+  await sendReply(root);
+  assert.equal(attempts, 1);
+  assert.equal(loads - before, 1);
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Could not confirm/);
+  assert.equal(drafts.get('forum.501').text, 'Hola\n<b>x</b>');
+});
+
+test('reply: a refusal from Aules is shown, the text stays and nothing is retried', async () => {
+  let attempts = 0;
+  const { app, root, win, drafts } = setup({
+    addDiscussionPost: async () => { attempts += 1; throw new MoodleError('nopermission', 'You cannot reply here'); },
+  }, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7/topic/101');
+  await sendReply(root);
+  assert.equal(attempts, 1);
+  assert.match(root.querySelector('.post[data-id="501"] .form-msg').textContent, /You cannot reply here/);
+  assert.equal(root.querySelector('.post[data-id="501"] textarea').value, 'Hola\n<b>x</b>');
+  assert.equal(drafts.get('forum.501').text, 'Hola\n<b>x</b>');
+});
+
+test('reply: signing out while the reply is in flight drops the result and sends nothing more', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let loads = 0;
+  const { app, root, win } = setup({
+    getDiscussionPosts: async () => { loads += 1; return samplePosts; },
+    addDiscussionPost: async () => { await gate; return { postid: 999, warnings: [] }; },
+  }, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7/topic/101');
+  const before = loads;
+  const pending = sendReply(root);
+  await tick();
+  app.logout();
+  release();
+  await pending;
+  await settle();
+  assert.ok(root.querySelector('form.login-card'));
+  assert.equal(loads, before);
+  assert.equal(root.querySelector('.flash'), null);
+});
+
+test('forum drafts are removed at sign-out', async () => {
+  const { app, root, win, drafts } = setup({}, true);
+  await app.start();
+  await goForum(app, win, '#/course/11/forum/7/topic/101');
+  const post = root.querySelector('.post[data-id="501"]');
+  post.querySelector('.reply-btn').click();
+  post.querySelector('textarea').value = 'draft';
+  post.querySelector('textarea').dispatchEvent(new window.Event('input'));
+  assert.equal(drafts.get('forum.501').text, 'draft');
+  app.logout();
+  assert.equal(drafts.get('forum.501'), null);
 });
