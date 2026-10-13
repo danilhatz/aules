@@ -10,9 +10,17 @@ A phone-friendly web app (PWA) for https://aules.edu.gva.es/fpa. It signs in wit
 - Courses are grouped into your Aules category folders. The app asks Moodle's course overview first (it includes the category name), then falls back to the enrolled-courses list plus `core_course_get_categories`, then to a flat list. Folder open/closed state is remembered on the device; search looks across all folders.
 - **Diagnostics** (header link): runs read-only calls and shows a report you can copy: Moodle version, which write functions your token may call (assignments, quizzes, forums, file upload), categories and activity types. It contains no tokens, names, ids, file names or URLs.
 
-## What is coming
+## Exercises (assignments)
 
-Exercises (assignments with typed answers and file/photo upload), quizzes and forums. They appear in courses today with a "Coming soon" note.
+Open an Exercise from a course to read the instructions, see the due date and status, write a typed answer, and (if your account allows it) attach files or photos. Grades and teacher feedback appear once published.
+
+- **Save draft** and **Submit** are separate buttons, and Submit always asks you to confirm first.
+- Nothing is sent without a tap, requests are never repeated automatically, and if the connection drops mid-send the app tells you it could not confirm and re-checks the status instead of guessing.
+- Only the parts you changed are sent, so editing text never touches your files.
+- Your typed text is kept on the phone while you write (and removed on sign out), so leaving the screen does not lose it.
+- File and photo upload depends on your school's settings. Run **Diagnostics -> Test upload** once; it sends one tiny dummy file to your own draft area (nothing is submitted) and records whether uploads work.
+
+Still to come: quizzes and forums (they show "Coming soon" in courses).
 
 ## Run locally
 
