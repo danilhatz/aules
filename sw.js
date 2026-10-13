@@ -20,6 +20,8 @@ const SHELL = [
   "./src/errors.js",
   "./src/folders.js",
   "./src/i18n.js",
+  "./src/lang/en.js",
+  "./src/lang/uk.js",
   "./src/qhtml.js",
   "./src/quiz.js",
   "./src/main.js",
