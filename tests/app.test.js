@@ -1108,3 +1108,11 @@ test('a missing next page means the last page: no Next button, even if nextpage 
   assert.equal(hasButton(root, 'Next'), false);
   assert.equal(hasButton(root, 'Finish attempt'), true);
 });
+
+test('without an explicit locale the app formats dates in the active app language', async () => {
+  const { LANG } = await import('../src/strings.js');
+  assert.equal(LANG, 'en');
+  const src = await (await import('node:fs/promises')).readFile(new URL('../src/app.js', import.meta.url), 'utf8');
+  assert.match(src, /locale = LANG\b/);
+  assert.doesNotMatch(src, /navigator\.language/);
+});

@@ -8,6 +8,9 @@ import { createFolderState } from './folders.js';
 import { createDrafts } from './drafts.js';
 import { createAttemptStore } from './attemptstore.js';
 import { createTimings } from './timings.js';
+import { LANG } from './strings.js';
+
+document.documentElement.lang = LANG;
 
 const storage = getStorage();
 const timings = createTimings();

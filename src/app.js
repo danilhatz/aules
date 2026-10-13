@@ -19,7 +19,7 @@ import { createDrafts } from './drafts.js';
 import { createMemoryStorage } from './storage.js';
 import { describeError } from './errors.js';
 import { MoodleError } from './api.js';
-import { STRINGS as S } from './strings.js';
+import { STRINGS as S, LANG } from './strings.js';
 import { renderLangSwitch } from './ui/langswitch.js';
 
 const assignmentsOf = (res) => (res && Array.isArray(res.courses) && res.courses[0] && Array.isArray(res.courses[0].assignments) ? res.courses[0].assignments : []);
@@ -36,7 +36,7 @@ export function createApp({
   drafts = createDrafts(createMemoryStorage()),
   attemptStore = createAttemptStore(createMemoryStorage()),
   timings = null,
-  locale = globalThis.navigator && globalThis.navigator.language,
+  locale = LANG,
   nowFn = () => Math.floor(Date.now() / 1000),
 }) {
   let courses = [];

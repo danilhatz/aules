@@ -31,6 +31,12 @@ Take simple quizzes (multiple choice, true/false, short answer and numeric quest
 
 Still to come: forums (they show "Coming soon" in courses).
 
+## Language
+
+The app shows its own text in English or Ukrainian. By default it follows the phone language; the switch on the login screen and under the course-list header (Auto / English / Українська) overrides it and is remembered on the device. Changing it reloads the app; your session and drafts are kept. Texts live in `src/lang/en.js` and `src/lang/uk.js`; a test keeps their keys and `{placeholders}` identical, and a missing Ukrainian string falls back to English. Aules' own content (course names, instructions, feedback, Moodle messages) is shown as Aules sends it. The Diagnostics report stays in English.
+
+To add a language: create `src/lang/xx.js`, add the code to `LANGUAGES` in `src/i18n.js`, add the pack in `src/strings.js` and an option in `src/ui/langswitch.js` (with its name key in both language files).
+
 ## Run locally
 
 ```bash
