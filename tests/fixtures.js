@@ -66,3 +66,20 @@ export const shortHtml = (u = 7, s = 3) => frame(u, s, 'shortanswer', 'Not yet a
 
 export const numericalHtml = (u = 8, s = 4) => frame(u, s, 'numerical', 'Not yet answered',
   `<div class="qtext"><p>What is 6 x 7?</p></div><div class="ablock"><label class="sr-only" for="q${u}:${s}_answer">Answer</label><span class="answer"><input type="text" name="q${u}:${s}_answer" value="" id="q${u}:${s}_answer" size="30" inputmode="decimal"></span></div>`);
+
+export const sampleQuizzesResponse = {
+  quizzes: [{ id: 3, coursemodule: 10, course: 11, name: 'Test 1', intro: '<p>Responde a las preguntas.</p>', timeopen: 0, timeclose: 1785172800, timelimit: 0, attempts: 2, grademethod: 1, grade: 10, sumgrades: 2, navmethod: 'free' }],
+};
+export const sampleQuizAccess = { canattempt: true, activerulenames: ['quizaccess_openclosedate'], preventaccessreasons: [] };
+export const sampleQtypes = { questiontypes: ['multichoice', 'truefalse'] };
+export const sampleAttemptAccess = { endtime: 0, isfinished: false, ispreflightcheckrequired: false, preventnewattemptreasons: [] };
+export const sampleNoAttempts = { attempts: [] };
+export const sampleBest = { hasgrade: false };
+export const sampleAttemptPage = (page, nextpage) => ({
+  attempt: { id: 77, state: 'inprogress', currentpage: page },
+  nextpage,
+  questions: page === 0
+    ? [{ slot: 1, number: 1, type: 'multichoice', html: mcqHtml(5, 1) }]
+    : [{ slot: 2, number: 2, type: 'truefalse', html: tfHtml(6, 2) }],
+  warnings: [],
+});

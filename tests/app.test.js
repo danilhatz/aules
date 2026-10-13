@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupDom } from './helpers/dom.js';
-import { sampleCourses, sampleSections, sampleAssignmentsResponse, sampleStatusResponse } from './fixtures.js';
+import {
+  sampleCourses, sampleSections, sampleAssignmentsResponse, sampleStatusResponse,
+  sampleQuizzesResponse, sampleQuizAccess, sampleQtypes, sampleAttemptAccess, sampleNoAttempts, sampleBest, sampleAttemptPage, mcqHtml,
+} from './fixtures.js';
 import { MoodleError } from '../src/api.js';
 import { createMemoryStorage } from '../src/storage.js';
 
@@ -10,6 +13,7 @@ const { createAuth } = await import('../src/auth.js');
 const { createCache } = await import('../src/store.js');
 const { createVault, createMemoryKeyStore } = await import('../src/vault.js');
 const { createDrafts } = await import('../src/drafts.js');
+const { createAttemptStore } = await import('../src/attemptstore.js');
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -28,6 +32,18 @@ function setup(apiOverrides = {}, preloadSession = false) {
     submitForGrading: async () => [],
     uploadDraftFile: async (t, f) => ({ itemid: 900, filename: f.name }),
     deleteDraftFiles: async () => [],
+    getQuizzes: async () => sampleQuizzesResponse,
+    getQuizAccess: async () => sampleQuizAccess,
+    getAttemptAccess: async () => sampleAttemptAccess,
+    getQuizQtypes: async () => sampleQtypes,
+    getUserAttempts: async () => sampleNoAttempts,
+    getBestGrade: async () => sampleBest,
+    startAttempt: async () => ({ attempt: { id: 77, state: 'inprogress', currentpage: 0 }, warnings: [] }),
+    getAttemptData: async (t, id, page) => sampleAttemptPage(page, page === 0 ? 1 : -1),
+    saveAttempt: async () => ({ status: true, warnings: [] }),
+    processAttempt: async (t, id, data, o) => ({ state: o && o.finish ? 'finished' : 'inprogress', warnings: [] }),
+    getAttemptSummary: async () => ({ questions: [{ slot: 1, state: 'complete' }, { slot: 2, state: 'todo' }] }),
+    getAttemptReview: async () => ({ grade: '1.00', attempt: { id: 77 }, questions: [{ slot: 1, number: 1, type: 'multichoice', html: mcqHtml(5, 1) }], warnings: [] }),
     ...apiOverrides,
   };
   const vault = createVault({ storage, keyStore: createMemoryKeyStore() });
@@ -36,8 +52,9 @@ function setup(apiOverrides = {}, preloadSession = false) {
   if (preloadSession) storage.setItem('aules.session', JSON.stringify({ token: 'tok', userid: 7, fullname: 'Ana' }));
   const root = document.getElementById('app');
   const drafts = createDrafts(storage);
-  const app = createApp({ root, api, auth, cache, win: dom.window, drafts, nowFn: () => 1785000000, locale: 'en' });
-  return { app, root, storage, auth, cache, vault, drafts, api, win: dom.window };
+  const attemptStore = createAttemptStore(storage);
+  const app = createApp({ root, api, auth, cache, win: dom.window, drafts, attemptStore, nowFn: () => 1785000000, locale: 'en' });
+  return { app, root, storage, auth, cache, vault, drafts, attemptStore, api, win: dom.window };
 }
 
 test('no session -> login screen', async () => {
@@ -759,4 +776,219 @@ test('an unconfirmed write also discards the saved status so it cannot be mistak
   await settle();
   assert.equal(cache.get('status:42'), null);
   assert.match(root.querySelector('.pane-detail .flash').textContent, /Could not confirm/);
+});
+
+// ---------- quizzes ----------
+const goQuiz = async (win, hash = '#/course/11/quiz/10') => { win.location.hash = hash; await settle(); };
+const quizClick = (root, text) => [...root.querySelectorAll('.pane-detail button')].find((b) => b.textContent === text).click();
+const hasButton = (root, text) => [...root.querySelectorAll('.pane-detail button')].some((b) => b.textContent === text);
+
+test('the course page links the quiz', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  win.location.hash = '#/course/11';
+  await settle();
+  const link = root.querySelector('a.quiz-link');
+  assert.ok(link);
+  assert.equal(link.getAttribute('href'), '#/course/11/quiz/10');
+});
+
+test('the quiz screen shows the saved quiz at once but offers Start only after the fresh checks', async () => {
+  const [gate, release] = gateOf();
+  const { app, root, win, cache } = setup({ getQuizQtypes: async () => { await gate; return sampleQtypes; } }, true);
+  cache.set('quizzes:11', sampleQuizzesResponse.quizzes);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10';
+  await tick(); await tick();
+  assert.equal(root.querySelector('.pane-detail h2').textContent, 'Test 1'); // from the saved copy
+  assert.equal(hasButton(root, 'Start attempt'), false); // but no Start yet
+  assert.match(root.querySelector('.pane-detail').textContent, /Checking this quiz/);
+  release();
+  await settle();
+  assert.equal(hasButton(root, 'Start attempt'), true);
+});
+
+test('an unsupported quiz never offers Start', async () => {
+  const { app, root, win } = setup({ getQuizQtypes: async () => ({ questiontypes: ['multichoice', 'ddwtos'] }) }, true);
+  await app.start();
+  await goQuiz(win);
+  assert.equal(hasButton(root, 'Start attempt'), false);
+  assert.match(root.querySelector('.pane-detail').textContent, /ddwtos/);
+  assert.ok(root.querySelector('.pane-detail a[href*="mod/quiz/view.php?id=10"]'));
+});
+
+test('a failed check (unknown) never offers Start', async () => {
+  const { app, root, win } = setup({ getQuizAccess: async () => { throw new MoodleError('accessexception'); } }, true);
+  await app.start();
+  await goQuiz(win);
+  assert.equal(hasButton(root, 'Start attempt'), false);
+  assert.match(root.querySelector('.pane-detail').textContent, /Could not check/);
+});
+
+test('Start asks for confirmation, starts once, and opens the attempt', async () => {
+  let starts = 0;
+  const { app, root, win } = setup({ startAttempt: async () => { starts += 1; return { attempt: { id: 77, currentpage: 0 }, warnings: [] }; } }, true);
+  await app.start();
+  await goQuiz(win);
+  quizClick(root, 'Start attempt');
+  assert.equal(starts, 0);
+  quizClick(root, 'Yes, start');
+  await settle();
+  assert.equal(starts, 1);
+  assert.equal(win.location.hash, '#/course/11/quiz/10/attempt/77');
+  assert.ok(root.querySelector('.pane-detail input[name="q5:1_answer"]'));
+});
+
+test('an unconfirmed start reloads the quiz and offers Continue for the attempt that now exists', async () => {
+  let attempts = { attempts: [] };
+  const { app, root, win } = setup({
+    startAttempt: async () => { attempts = { attempts: [{ id: 77, attempt: 1, state: 'inprogress', currentpage: 0 }] }; throw new MoodleError('network'); },
+    getUserAttempts: async () => attempts,
+  }, true);
+  await app.start();
+  await goQuiz(win);
+  quizClick(root, 'Start attempt');
+  quizClick(root, 'Yes, start');
+  await settle();
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Could not confirm/);
+  assert.equal(root.querySelector('.pane-detail a.btn').getAttribute('href'), '#/course/11/quiz/10/attempt/77');
+});
+
+test('an in-progress attempt shows Continue, and the attempt opens on its saved page', async () => {
+  const inprog = { attempts: [{ id: 77, attempt: 1, state: 'inprogress', currentpage: 1 }] };
+  const { app, root, win } = setup({ getUserAttempts: async () => inprog }, true);
+  await app.start();
+  await goQuiz(win);
+  assert.equal(root.querySelector('.pane-detail a.btn').getAttribute('href'), '#/course/11/quiz/10/attempt/77');
+  win.location.hash = '#/course/11/quiz/10/attempt/77';
+  await settle();
+  assert.ok(root.querySelector('.pane-detail input[name="q6:2_answer"]')); // page 1 = the true/false question
+});
+
+test('Next sends the page answers with process_attempt (no finish) and moves to the next page; local answers survive', async () => {
+  const sent = [];
+  const { app, root, win, attemptStore } = setup({ processAttempt: async (t, id, data, o) => { sent.push([data, o]); return { state: 'inprogress', warnings: [] }; } }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  const radio = root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]');
+  radio.checked = true;
+  radio.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.ok(attemptStore.get(77, 0));
+  quizClick(root, 'Next');
+  await settle();
+  assert.equal(sent.length, 1);
+  assert.ok(sent[0][0].some((a) => a.name === 'q5:1_answer' && a.value === '1'));
+  assert.equal(!!sent[0][1].finish, false);
+  assert.equal(win.location.hash, '#/course/11/quiz/10/attempt/77/1');
+  assert.ok(root.querySelector('.pane-detail input[name="q6:2_answer"]'));
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  assert.equal(root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]').checked, true); // restored locally
+});
+
+test('Finish shows the summary, needs a confirm, finishes once, clears local answers and returns to the quiz with a flash', async () => {
+  let finishes = 0;
+  const { app, root, win, attemptStore } = setup({
+    processAttempt: async (t, id, data, o) => { if (o && o.finish) finishes += 1; return { state: o && o.finish ? 'finished' : 'inprogress', warnings: [] }; },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/1';
+  await settle();
+  const r = root.querySelector('.pane-detail input[name="q6:2_answer"][value="1"]');
+  r.checked = true;
+  r.dispatchEvent(new window.Event('change', { bubbles: true }));
+  quizClick(root, 'Finish attempt');
+  await settle();
+  assert.match(root.querySelector('.pane-detail .confirm').textContent, /answered 1 of 2/);
+  assert.equal(finishes, 0);
+  quizClick(root, 'Yes, submit');
+  await settle();
+  assert.equal(finishes, 1);
+  assert.equal(attemptStore.get(77, 1), null);
+  assert.equal(win.location.hash, '#/course/11/quiz/10');
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Attempt finished/);
+});
+
+test('an expired token during a quiz write renews the session but does not replay the write', async () => {
+  let saves = 0;
+  const { app, root, win, vault } = setup({
+    saveAttempt: async () => { saves += 1; throw new MoodleError('invalidtoken'); },
+    requestToken: async () => 'fresh',
+  }, true);
+  await vault.save('u', 'pw');
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  quizClick(root, 'Save');
+  await settle();
+  assert.equal(saves, 1);
+  assert.match(root.querySelector('.pane-detail .form-msg').textContent, /tap again/);
+});
+
+test('a network failure while saving a page is an unconfirmed outcome that reloads the quiz', async () => {
+  const { app, root, win } = setup({ saveAttempt: async () => { throw new MoodleError('network'); } }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  quizClick(root, 'Save');
+  await settle();
+  assert.equal(win.location.hash, '#/course/11/quiz/10');
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Could not confirm/);
+});
+
+test('sign-out during a quiz write drops the result, clears local answers and leaves no flash for the next session', async () => {
+  let release; const gate = new Promise((r) => { release = r; });
+  const { app, root, win, attemptStore } = setup({ processAttempt: async (t, id, data, o) => { await gate; return { state: o && o.finish ? 'finished' : 'inprogress', warnings: [] }; } }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  const radio = root.querySelector('.pane-detail input[name="q5:1_answer"][value="0"]');
+  radio.checked = true;
+  radio.dispatchEvent(new window.Event('change', { bubbles: true }));
+  quizClick(root, 'Next');
+  await tick();
+  app.logout();
+  release();
+  await settle();
+  assert.equal(attemptStore.get(77, 0), null);
+  await app.login('u', 'p');
+  win.location.hash = '#/course/11/quiz/10';
+  await settle();
+  assert.equal(root.querySelector('.pane-detail .flash'), null);
+});
+
+test('an attempt containing an unsupported question type shows no controls', async () => {
+  const { app, root, win } = setup({ getAttemptData: async () => ({ attempt: { id: 77 }, nextpage: -1, questions: [{ slot: 1, number: 1, type: 'ddwtos', html: '<div class="que ddwtos"></div>' }], warnings: [] }) }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  assert.match(root.querySelector('.pane-detail').textContent, /cannot show/);
+  assert.equal(root.querySelector('.pane-detail input'), null);
+});
+
+test('the review screen shows the finished attempt read-only', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/review/77';
+  await settle();
+  assert.match(root.querySelector('.pane-detail').textContent, /Grade: 1\.00/);
+  assert.ok([...root.querySelectorAll('.pane-detail input:not([type=hidden])')].every((i) => i.hasAttribute('disabled')));
+});
+
+test('a quiz that is not in the course shows a not-found message', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  await goQuiz(win, '#/course/11/quiz/999');
+  assert.match(root.querySelector('.pane-detail').textContent, /not found/);
+});
+
+test('offline with a saved quiz shows it read-only with no attempt actions', async () => {
+  const { app, root, win, cache } = setup({ getQuizzes: async () => { throw new MoodleError('network'); } }, true);
+  cache.set('quizzes:11', sampleQuizzesResponse.quizzes);
+  await app.start();
+  await goQuiz(win);
+  assert.equal(root.querySelector('.pane-detail h2').textContent, 'Test 1');
+  assert.equal(hasButton(root, 'Start attempt'), false);
+  assert.match(root.querySelector('.pane-detail').textContent, /offline/i);
 });

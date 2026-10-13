@@ -6,6 +6,7 @@ import { getStorage } from './storage.js';
 import { createVault, createIdbKeyStore } from './vault.js';
 import { createFolderState } from './folders.js';
 import { createDrafts } from './drafts.js';
+import { createAttemptStore } from './attemptstore.js';
 import { createTimings } from './timings.js';
 
 const storage = getStorage();
@@ -20,6 +21,7 @@ const app = createApp({
   cache: createCache(storage),
   folderState: createFolderState(storage),
   drafts: createDrafts(storage),
+  attemptStore: createAttemptStore(storage),
 });
 app.start();
 
