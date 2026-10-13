@@ -188,3 +188,19 @@ test('opening folders automatically (selected course / default) never overwrites
   assert.equal(createFolderState(storage).get('Español A1'), false);
   assert.equal(createFolderState(storage).get('Español B1'), undefined); // defaults are never persisted
 });
+
+test('assign modules link to the assignment route and show a due date when known', () => {
+  const sections = buildCourse(sampleSections, 'T');
+  const NOW = 1785000000;
+  const el = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T', dues: { 9: NOW + 2 * 86400 }, now: NOW, locale: 'en' });
+  const link = el.querySelector('a.assign-link');
+  assert.equal(link.getAttribute('href'), '#/course/11/assign/9');
+  assert.equal(link.textContent, 'Tarea 1');
+  const mod = link.closest('li.mod');
+  assert.equal(mod.querySelector('.chip').textContent, 'Exercise');
+  assert.match(mod.querySelector('small.due').textContent, /in 2 days/);
+  const overdue = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T', dues: { 9: NOW - 3600 }, now: NOW, locale: 'en' });
+  assert.ok(overdue.querySelector('small.due.overdue'));
+  const none = renderCourse({ course: { id: 11, fullname: 'X', sections }, token: 'T' });
+  assert.equal(none.querySelector('small.due'), null);
+});

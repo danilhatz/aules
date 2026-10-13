@@ -23,6 +23,7 @@ export const sampleSections = [
       { id: 6, name: 'Secret', modname: 'resource', uservisible: false, contents: [] },
       { id: 7, name: 'Questions', modname: 'forum', uservisible: true },
       { id: 8, name: 'Glossary', modname: 'glossary', uservisible: true },
+      { id: 9, name: 'Tarea 1', modname: 'assign', uservisible: true, description: '' },
     ],
   },
   { id: 102, section: 2, name: 'Empty', summary: '', modules: [] },
