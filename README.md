@@ -7,6 +7,12 @@ A phone-friendly web app (PWA) for https://aules.edu.gva.es/fpa. It signs in wit
 - Static files only (vanilla JS modules, no build step, no backend).
 - Sign-in uses Moodle's mobile web service: `POST login/token.php` returns a token, then `webservice/rest/server.php` calls (`core_enrol_get_users_courses`, `core_course_get_contents`) read your data. Aules allows these cross-origin requests, so the phone talks to Aules directly over mobile data.
 - Course files open with your token appended, only for `aules.edu.gva.es` URLs.
+- Courses are grouped into your Aules category folders. The app asks Moodle's course overview first (it includes the category name), then falls back to the enrolled-courses list plus `core_course_get_categories`, then to a flat list. Folder open/closed state is remembered on the device; search looks across all folders.
+- **Diagnostics** (header link): runs read-only calls and shows a report you can copy: Moodle version, which write functions your token may call (assignments, quizzes, forums, file upload), categories and activity types. It contains no tokens, names, ids, file names or URLs.
+
+## What is coming
+
+Exercises (assignments with typed answers and file/photo upload), quizzes and forums. They appear in courses today with a "Coming soon" note.
 
 ## Run locally
 
@@ -19,7 +25,7 @@ npm run serve
 Then open:
 
 - `http://localhost:8080/` — the real app (you type your own credentials).
-- `http://localhost:8080/tools/preview.html` — demo with fixture data, no network, already "signed in".
+- `http://localhost:8080/tools/preview.html` — demo with fixture data (category folders, course page, Diagnostics), no network, already "signed in".
 
 ## Deploy (your decision, not automatic)
 

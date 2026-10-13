@@ -27,3 +27,11 @@ export const sampleSections = [
   },
   { id: 102, section: 2, name: 'Empty', summary: '', modules: [] },
 ];
+
+export const sampleTimelineCourses = [
+  { id: 11, fullname: 'Gramática A1', shortname: 'ES-GRA-A1', coursecategory: 'Español A1', progress: 40 },
+  { id: 12, fullname: 'Vocabulario A1', shortname: 'ES-VOC-A1', coursecategory: 'Español A1', progress: 10 },
+  { id: 13, fullname: 'Cultura y sociedad', shortname: 'ES-CUL-B1', coursecategory: 'Español B1', progress: null },
+  { id: 14, fullname: 'Conversación B1', shortname: 'ES-CON-B1', coursecategory: 'Español B1', progress: 75 },
+  { id: 15, fullname: 'Taller de escritura', shortname: 'ES-TAL', coursecategory: '', progress: null },
+];
