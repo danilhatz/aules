@@ -31,6 +31,10 @@ Take simple quizzes (multiple choice, true/false, short answer and numeric quest
 
 Still to come: forums (they show "Coming soon" in courses).
 
+## Forums
+
+Forums are read-and-reply. Open a forum from its course to see the topics (20 at a time, **Load more** for older ones) and open a topic to read the thread. A **Reply** button appears only on posts Aules lets you reply to. A reply is plain text, is saved as a draft on the device while you type, and needs two taps (**Send**, then **Yes, send**). It is never sent automatically and never retried: if the connection drops after sending, the app reloads the topic and says it could not confirm, and your text is kept so you can check before sending again. Starting new topics, editing or deleting posts and attachments stay on the Aules website.
+
 ## Language
 
 The app shows its own text in English or Ukrainian. By default it follows the phone language; the switch on the login screen and under the course-list header (Auto / English / Українська) overrides it and is remembered on the device. Changing it reloads the app; your session and drafts are kept. Texts live in `src/lang/en.js` and `src/lang/uk.js`; a test keeps their keys and `{placeholders}` identical, and a missing Ukrainian string falls back to English. Aules' own content (course names, instructions, feedback, Moodle messages) is shown as Aules sends it. The Diagnostics report stays in English.

@@ -22,3 +22,9 @@ test('the login screen keeps its card and the language switch together in the ve
   const rule = /\.login\s*\{[^}]*\}/.exec(css)[0];
   assert.match(rule, /align-content:\s*center/);
 });
+
+test('forum screens have styles: topic rows, thread indentation up to depth 3, reply box', () => {
+  for (const sel of ['.topics', '.topic', '.post', '.post.depth-1', '.post.depth-2', '.post.depth-3', '.reply-text']) {
+    assert.ok(css.includes(sel), sel);
+  }
+});

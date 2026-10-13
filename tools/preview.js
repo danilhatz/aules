@@ -8,6 +8,7 @@ import { createAttemptStore } from '../src/attemptstore.js';
 import {
   sampleCourses, sampleSections, sampleTimelineCourses, sampleAssignmentsResponse, sampleStatusResponse,
   sampleQuizzesResponse, sampleQuizAccess, sampleQtypes, sampleAttemptAccess, sampleNoAttempts, sampleBest, sampleAttemptPage, mcqHtml,
+  sampleForums, sampleDiscussions, samplePosts,
 } from '../tests/fixtures.js';
 
 let demoAttempts = sampleNoAttempts;
@@ -42,6 +43,11 @@ const api = {
   getAttemptAccess: async () => sampleAttemptAccess,
   getQuizQtypes: async () => sampleQtypes,
   getUserAttempts: async () => demoAttempts,
+  // Demo-only fake forum API: replies are accepted but the demo data does not change.
+  getForums: async () => sampleForums,
+  getForumDiscussions: async () => sampleDiscussions,
+  getDiscussionPosts: async () => samplePosts,
+  addDiscussionPost: async () => ({ postid: 999, warnings: [] }),
   getBestGrade: async () => sampleBest,
   startAttempt: async () => {
     demoAttempts = { attempts: [{ id: 77, attempt: 1, state: 'inprogress', currentpage: 0 }] };

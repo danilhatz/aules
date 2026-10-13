@@ -153,3 +153,18 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .lang-switch select { font: inherit; font-size: 16px; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); padding: 0 8px; max-width: 150px; width: auto; }
 .login > .lang-switch { justify-content: center; margin-top: 12px; }
 .pane-list > .lang-switch { margin: 0 16px 8px; justify-content: flex-end; }
+
+/* Forums */
+.topics { list-style: none; margin: 0; padding: 0 16px 16px; display: grid; gap: 10px; }
+.topic { display: grid; gap: 4px; padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
+.topic-link { font-weight: 600; text-decoration: none; color: inherit; min-height: 24px; }
+.topic-meta { color: var(--muted); }
+.posts { display: grid; gap: 10px; padding: 0 16px 16px; }
+.post { padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); overflow-wrap: anywhere; }
+.post.depth-1 { margin-left: 12px; }
+.post.depth-2 { margin-left: 24px; }
+.post.depth-3 { margin-left: 36px; }
+.post-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.post h4 { margin: 6px 0 0; }
+.reply-box { margin-top: 8px; display: grid; gap: 8px; }
+.reply-text { width: 100%; font: inherit; font-size: 16px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); }
