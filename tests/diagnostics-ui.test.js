@@ -46,3 +46,28 @@ test('a failing run shows a friendly error instead of the report', async () => {
   assert.match(el.querySelector('pre.report').textContent, /Cannot reach Aules/);
   assert.equal(el.querySelector('button.copy').disabled, true);
 });
+
+test('Test upload is never run automatically; tapping it appends the result to the report', async () => {
+  let runs = 0;
+  const el = renderDiagnostics({ run: async () => 'REPORT', clipboard: undefined, onUploadTest: async () => { runs += 1; return 'Upload test: ok'; } });
+  await tick();
+  assert.equal(runs, 0);
+  const b = el.querySelector('button.upload-test');
+  assert.equal(b.textContent, 'Test upload');
+  b.click();
+  assert.equal(b.disabled, true);
+  await tick();
+  assert.equal(runs, 1);
+  assert.equal(el.querySelector('pre.report').textContent, 'REPORT\n\nUpload test: ok');
+  assert.equal(b.disabled, false);
+});
+
+test('a throwing upload test is reported as a generic error line; the button is absent without a handler', async () => {
+  const el = renderDiagnostics({ run: async () => 'R', clipboard: undefined, onUploadTest: async () => { throw new Error('x'); } });
+  await tick();
+  el.querySelector('button.upload-test').click();
+  await tick();
+  assert.match(el.querySelector('pre.report').textContent, /Upload test: error$/);
+  const none = renderDiagnostics({ run: async () => 'R', clipboard: undefined });
+  assert.equal(none.querySelector('button.upload-test'), null);
+});

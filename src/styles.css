@@ -118,3 +118,4 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .files-box { margin-top: 12px; }
 .files .remove { min-height: 32px; }
 .grade { font-weight: 700; }
+.diagnostics .upload-test { width: calc(100% - 32px); margin: 10px 16px 0; }
