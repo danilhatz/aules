@@ -9,6 +9,7 @@ const SHELL = [
   "./icons/icon-512.png",
   "./src/api.js",
   "./src/assign.js",
+  "./src/attemptstore.js",
   "./src/app.js",
   "./src/auth.js",
   "./src/config.js",
