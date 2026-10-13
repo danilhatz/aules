@@ -83,3 +83,24 @@ export const sampleAttemptPage = (page, nextpage) => ({
     : [{ slot: 2, number: 2, type: 'truefalse', html: tfHtml(6, 2) }],
   warnings: [],
 });
+
+export const sampleForums = [
+  { id: 31, course: 11, type: 'general', name: 'Questions', intro: '<p>Ask your questions here.</p>', cmid: 7 },
+  { id: 32, course: 11, type: 'news', name: 'Announcements', intro: '', cmid: 12 },
+];
+
+export const sampleDiscussions = {
+  discussions: [
+    { id: 501, discussion: 101, name: 'Verb tenses', subject: 'Verb tenses', userfullname: 'Ana Soler', timemodified: 1784900000, numreplies: 2, pinned: true, locked: false, canreply: true },
+    { id: 502, discussion: 102, name: 'Homework 2', subject: 'Homework 2', userfullname: 'Pere Mas', timemodified: 1784800000, numreplies: 0, pinned: false, locked: false, canreply: true },
+  ],
+  warnings: [],
+};
+
+export const samplePosts = {
+  posts: [
+    { id: 501, discussionid: 101, parentid: 0, subject: 'Verb tenses', message: '<p>When do we use <b>pretérito</b>?</p>', author: { fullname: 'Ana Soler' }, timecreated: 1784800000, isdeleted: false, capabilities: { reply: true }, attachments: [{ filename: 'notes.pdf', fileurl: `${F}/9/mod_forum/attachment/501/notes.pdf` }] },
+    { id: 503, discussionid: 101, parentid: 501, subject: 'Re: Verb tenses', message: '<p>For finished actions.</p><script>alert(1)</script>', author: { fullname: 'Marta Vila' }, timecreated: 1784850000, isdeleted: false, capabilities: { reply: true }, attachments: [] },
+    { id: 504, discussionid: 101, parentid: 503, subject: 'Re: Verb tenses', message: '<p>Thanks!</p>', author: { fullname: 'Ana Soler' }, timecreated: 1784900000, isdeleted: false, capabilities: { reply: false }, attachments: [] },
+  ],
+};
