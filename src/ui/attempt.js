@@ -1,7 +1,7 @@
 import { h } from './dom.js';
 import { STRINGS as S } from '../strings.js';
 import { describeError } from '../errors.js';
-import { withToken } from '../content.js';
+import { withToken, toWebserviceUrl } from '../content.js';
 import { sanitizeQuestionHtml, collectAnswers, snapshotAnswers, restoreSnapshot } from '../qhtml.js';
 import { SUPPORTED_QTYPES, formatTimeLeft } from '../quiz.js';
 
@@ -27,7 +27,7 @@ export function renderAttempt(p) {
         h('a', { class: 'btn secondary link-btn', href: p.openUrl, target: '_blank', rel: 'noopener noreferrer' }, S.openInAules)));
   }
   const clock = p.clock || defaultClock;
-  const rewriteUrl = (u) => withToken(u, p.token);
+  const rewriteUrl = (u) => withToken(toWebserviceUrl(u), p.token);
 
   const container = h('div', { class: 'questions' });
   for (const q of p.questions) {
@@ -97,7 +97,8 @@ export function renderAttempt(p) {
   });
 
   const timer = p.endTime ? h('p', { class: 'timer' }, '') : null;
-  const timeNote = h('p', { class: 'time-up note', hidden: true }, S.timeUp);
+  const timerMissing = !p.endTime && p.quiz.timeLimit > 0 ? h('p', { class: 'timer-missing note' }, S.timerMissing) : null;
+  const timeNote = h('p', { class: 'time-up note', role: 'alert', hidden: true }, S.timeUp);
   const tick = () => {
     const left = p.endTime - clock.now();
     if (timer) timer.textContent = `${S.timeLeft}: ${formatTimeLeft(left)}`;
@@ -111,7 +112,7 @@ export function renderAttempt(p) {
   };
 
   const bar = h('div', { class: 'attempt-bar' }, prevBtn, saveBtn, nextBtn, finishBtn);
-  const el = h('article', { class: 'course attempt' }, head, timer, timeNote, fields, msg, confirm, bar);
+  const el = h('article', { class: 'course attempt' }, head, timer, timerMissing, timeNote, fields, msg, confirm, bar);
   if (p.endTime) {
     tick();
     let wasConnected = false;
@@ -125,7 +126,7 @@ export function renderAttempt(p) {
 }
 
 export function renderReview(p) {
-  const rewriteUrl = (u) => withToken(u, p.token);
+  const rewriteUrl = (u) => withToken(toWebserviceUrl(u), p.token);
   const body = h('div', { class: 'questions' });
   for (const q of p.questions) {
     const sec = h('section', { class: 'question', 'data-number': String(q.number) });

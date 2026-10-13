@@ -53,10 +53,17 @@ const strings = (v) => list(v).filter((s) => typeof s === 'string' && s.trim() !
 // Decides what the quiz screen may offer. Anything uncertain means "do not start".
 export function startCheck({ access, qtypes, attemptAccess, attempts }) {
   const base = { canStart: false, attemptId: null, messages: [], unsupportedTypes: [], unsupportedRules: [], preflight: false };
-  if (!access || !qtypes || !attemptAccess || !attempts) return { ...base, mode: 'unknown' };
-  const unsupportedRules = list(access.activerulenames).filter((n) => !ALLOWED_RULES.has(n));
-  const unsupportedTypes = list(qtypes.questiontypes).filter((t) => !SUPPORTED_QTYPES.has(t));
-  const preflight = attemptAccess.ispreflightcheckrequired === true;
+  // Anything malformed or missing is "unknown": never offer Start on a guess.
+  const wellFormed = access && qtypes && attemptAccess && attempts
+    && Array.isArray(access.activerulenames) && Array.isArray(qtypes.questiontypes)
+    && Array.isArray(attemptAccess.preventnewattemptreasons) && typeof attemptAccess.ispreflightcheckrequired === 'boolean';
+  if (!wellFormed) return { ...base, mode: 'unknown' };
+  const unsupportedRules = access.activerulenames.filter((n) => !ALLOWED_RULES.has(n));
+  const unsupportedTypes = qtypes.questiontypes.filter((t) => !SUPPORTED_QTYPES.has(t));
+  // The time-limit rule asks for a pre-flight confirmation before every attempt; the start screen already
+  // states the limit. Any other pre-flight (password, extra checks) is unsupported.
+  const explainedPreflight = access.activerulenames.includes('quizaccess_timelimit') && unsupportedRules.length === 0;
+  const preflight = attemptAccess.ispreflightcheckrequired && !explainedPreflight;
   if (unsupportedRules.length || unsupportedTypes.length || preflight) {
     return { ...base, mode: 'unsupported', unsupportedRules, unsupportedTypes, preflight };
   }

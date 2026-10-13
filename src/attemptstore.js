@@ -26,6 +26,14 @@ export function createAttemptStore(storage) {
         storage.setItem(P + key, JSON.stringify({ pages: current.pages, savedAt: Date.now() }));
       } catch { /* best effort */ }
     },
+    removePage(attemptId, page) {
+      try {
+        const v = read(attemptId);
+        if (!v) return;
+        delete v.pages[String(page)];
+        storage.setItem(P + attemptId, JSON.stringify({ pages: v.pages, savedAt: Date.now() }));
+      } catch { /* best effort */ }
+    },
     remove(attemptId) {
       try { storage.removeItem(P + attemptId); } catch { /* best effort */ }
     },

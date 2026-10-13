@@ -4,7 +4,8 @@ const isFlag = (n) => /:flagged$/.test(n);
 export const isValidFieldName = (n) => typeof n === 'string' && NAME.test(n) && !isFlag(n);
 
 const DROP = new Set(['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'form', 'link', 'meta', 'base', 'noscript', 'template', 'audio', 'video', 'button', 'canvas']);
-const KEEP = new Set(['div', 'span', 'p', 'br', 'b', 'strong', 'i', 'em', 'sub', 'sup', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a', 'img', 'label', 'fieldset', 'legend', 'input', 'select', 'option', 'textarea', 'h3', 'h4', 'h5', 'h6', 'pre', 'code']);
+const KEEP = new Set(['div', 'span', 'p', 'br', 'b', 'strong', 'i', 'em', 'sub', 'sup', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a', 'img', 'label', 'fieldset', 'legend', 'input', 'select', 'option', 'textarea', 'h3', 'h4', 'h5', 'h6', 'pre', 'code',
+  'u', 's', 'del', 'ins', 'small', 'hr', 'blockquote', 'caption', 'figure', 'figcaption']);
 const CLASSES = new Set(['que', 'correct', 'incorrect', 'partiallycorrect', 'state', 'grade', 'qtext', 'answer', 'rightanswer', 'specificfeedback', 'generalfeedback', 'outcome', 'feedback', 'prompt', 'ablock', 'formulation', 'content', 'info', 'no', 'qno', 'multichoice', 'truefalse', 'shortanswer', 'numerical', 'description']);
 const INPUT_TYPES = new Set(['radio', 'checkbox', 'text', 'hidden']);
 
@@ -83,10 +84,25 @@ function cleanElement(el, tag, ctx) {
   }
 }
 
+// Moodle 4.x names a radio through aria-labelledby pointing at a div. Turn that div into a real <label for>,
+// so the answer text names the control for screen readers and tapping it selects the answer.
+function asLabel(el) {
+  if (el.localName !== 'div' || el.getAttribute('data-region') !== 'answer-label') return el;
+  const m = /^(q\d+:\d+_[A-Za-z0-9:_-]+)_label$/.exec(el.getAttribute('id') || '');
+  if (!m) return el;
+  const label = el.ownerDocument.createElement('label');
+  label.setAttribute('for', m[1]);
+  label.setAttribute('class', el.getAttribute('class') || '');
+  while (el.firstChild) label.append(el.firstChild);
+  el.replaceWith(label);
+  return label;
+}
+
 function walk(node, ctx) {
-  for (const child of Array.from(node.childNodes)) {
-    if (child.nodeType === 3) continue;
-    if (child.nodeType !== 1) { child.remove(); continue; }
+  for (const original of Array.from(node.childNodes)) {
+    if (original.nodeType === 3) continue;
+    if (original.nodeType !== 1) { original.remove(); continue; }
+    const child = asLabel(original);
     const tag = child.localName;
     if (DROP.has(tag)) { child.remove(); continue; }
     if (!KEEP.has(tag)) {

@@ -19,9 +19,9 @@ test('isValidFieldName accepts Aules field names and rejects everything else', (
 
 test('real-looking question markup keeps its answer controls, labels and text', () => {
   const box = render(mcqHtml());
-  assert.equal(box.querySelectorAll('input[type=radio][name="q5:1_answer"]').length, 3);
+  assert.equal(box.querySelectorAll('input[type=radio][name="q5:1_answer"]').length, 4); // three answers + Clear my choice (value -1)
   assert.ok(box.querySelector('input[type=hidden][name="q5:1_:sequencecheck"]'));
-  assert.ok(box.querySelector('input[name="q5:1_clearchoice"]'));
+  assert.ok(box.querySelector('input[name="q5:1_answer"][value="-1"]'));
   assert.match(box.textContent, /What is the capital of Spain/);
   assert.ok(box.querySelector('label[for="q5:1_answer0"]'));
   assert.ok(box.querySelector('fieldset legend'));
@@ -120,4 +120,28 @@ test('snapshot and restore round-trip answers, including unchecking and never to
   assert.equal(third.querySelector('input[name="q5:1_answer"][value="2"]').checked, false);
   assert.doesNotThrow(() => restoreSnapshot(third, null));
   assert.doesNotThrow(() => restoreSnapshot(third, {}));
+});
+
+test('Moodle 4.x answer labels (aria-labelledby + a div) become real labels, so the text names and selects the radio', () => {
+  const box = render(mcqHtml());
+  const label = box.querySelector('label[for="q5:1_answer0"]');
+  assert.ok(label);
+  assert.match(label.textContent, /Madrid/);
+  assert.equal(box.querySelector('[aria-labelledby]'), null);
+  assert.equal(box.querySelector('[data-region]'), null);
+  assert.equal(box.querySelector('input[name="q5:1_answer"][value="0"]').checked, false);
+  label.click(); // tapping the text selects the answer
+  assert.equal(box.querySelector('input[name="q5:1_answer"][value="0"]').checked, true);
+});
+
+test('an answer-label div whose id does not match its control is not turned into a label', () => {
+  const box = render('<div data-region="answer-label" id="evil" class="x">hi</div><div data-region="answer-label" id="q5:1_answer0_label">ok</div>');
+  assert.equal(box.querySelectorAll('label').length, 1);
+  assert.equal(box.querySelector('label').getAttribute('for'), 'q5:1_answer0');
+  assert.match(box.textContent, /hi/);
+});
+
+test('formatting that carries meaning survives in questions', () => {
+  const out = sanitizeQuestionHtml('<p>Pick the <u>underlined</u> word, not the <s>old</s> <del>one</del> <ins>new</ins> <small>(hint)</small></p><hr><blockquote>quote</blockquote><table><caption>Table</caption><tr><td>1</td></tr></table>');
+  for (const tag of ['u', 's', 'del', 'ins', 'small', 'hr', 'blockquote', 'caption']) assert.match(out, new RegExp('<' + tag + '[ >/]'), tag);
 });

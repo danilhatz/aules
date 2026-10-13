@@ -116,7 +116,7 @@ test('unsupported quizzes explain why and offer Open in Aules instead of Start',
   const rules = mk({ check: startCheck({ ...okInputs(), access: { canattempt: true, activerulenames: ['quizaccess_password'] } }) });
   assert.match(rules.el.textContent, /quizaccess_password/);
   rules.el.remove();
-  const pre = mk({ check: startCheck({ ...okInputs(), attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } }) });
+  const pre = mk({ check: startCheck({ ...okInputs(), access: { canattempt: true, activerulenames: ['quizaccess_openclosedate'] }, attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } }) });
   assert.match(pre.el.textContent, /extra confirmation/);
   pre.el.remove();
 });

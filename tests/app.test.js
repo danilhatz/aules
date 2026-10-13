@@ -865,7 +865,7 @@ test('an in-progress attempt shows Continue, and the attempt opens on its saved 
   assert.ok(root.querySelector('.pane-detail input[name="q6:2_answer"]')); // page 1 = the true/false question
 });
 
-test('Next sends the page answers with process_attempt (no finish) and moves to the next page; local answers survive', async () => {
+test('Next sends the page answers with process_attempt (no finish) and moves to the next page; unsent local answers survive', async () => {
   const sent = [];
   const { app, root, win, attemptStore } = setup({ processAttempt: async (t, id, data, o) => { sent.push([data, o]); return { state: 'inprogress', warnings: [] }; } }, true);
   await app.start();
@@ -882,9 +882,6 @@ test('Next sends the page answers with process_attempt (no finish) and moves to 
   assert.equal(!!sent[0][1].finish, false);
   assert.equal(win.location.hash, '#/course/11/quiz/10/attempt/77/1');
   assert.ok(root.querySelector('.pane-detail input[name="q6:2_answer"]'));
-  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
-  await settle();
-  assert.equal(root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]').checked, true); // restored locally
 });
 
 test('Finish shows the summary, needs a confirm, finishes once, clears local answers and returns to the quiz with a flash', async () => {
@@ -991,4 +988,123 @@ test('offline with a saved quiz shows it read-only with no attempt actions', asy
   assert.equal(root.querySelector('.pane-detail h2').textContent, 'Test 1');
   assert.equal(hasButton(root, 'Start attempt'), false);
   assert.match(root.querySelector('.pane-detail').textContent, /offline/i);
+});
+
+// ---------- quiz review fixes ----------
+const serverChecks = (v) => mcqHtml(5, 1).replace(`value="${v}" id="q5:1_answer${v}"`, `value="${v}" id="q5:1_answer${v}" checked`);
+
+test('after a page is saved the local copy is dropped, so answers changed elsewhere are not overridden', async () => {
+  let serverAnswer = 0;
+  const { app, root, win } = setup({
+    getAttemptData: async (t, id, page) => (page === 0
+      ? { ...sampleAttemptPage(0, 1), questions: [{ slot: 1, number: 1, type: 'multichoice', html: serverChecks(serverAnswer) }] }
+      : sampleAttemptPage(1, -1)),
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  const r1 = root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]');
+  r1.checked = true;
+  r1.dispatchEvent(new window.Event('change', { bubbles: true }));
+  quizClick(root, 'Next');
+  await settle();
+  serverAnswer = 2; // the answer was changed from another device meanwhile
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  assert.equal(root.querySelector('.pane-detail input[name="q5:1_answer"][value="2"]').checked, true);
+  assert.equal(root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]').checked, false);
+});
+
+test('answers that were typed but never sent survive leaving the page and coming back', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  const r1 = root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]');
+  r1.checked = true;
+  r1.dispatchEvent(new window.Event('change', { bubbles: true }));
+  win.location.hash = '#/course/11/quiz/10/attempt/77/1';
+  await settle();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  assert.equal(root.querySelector('.pane-detail input[name="q5:1_answer"][value="1"]').checked, true);
+});
+
+test('leaving the attempt while a page change is in flight does not pull the user back', async () => {
+  const [gate, release] = gateOf();
+  const { app, root, win } = setup({ processAttempt: async () => { await gate; return { state: 'inprogress', warnings: [] }; } }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  quizClick(root, 'Next');
+  await tick();
+  win.location.hash = '#/course/11';
+  await settle();
+  release();
+  await settle();
+  assert.equal(win.location.hash, '#/course/11');
+});
+
+test('finishing while the user is already back on the quiz screen refreshes it and shows the message', async () => {
+  const [gate, release] = gateOf();
+  const { app, root, win } = setup({
+    processAttempt: async (t, id, d, o) => { if (o && o.finish) await gate; return { state: o && o.finish ? 'finished' : 'inprogress', warnings: [] }; },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/1';
+  await settle();
+  quizClick(root, 'Finish attempt');
+  await settle();
+  quizClick(root, 'Yes, submit');
+  await tick();
+  win.location.hash = '#/course/11/quiz/10'; // the user went back to the quiz while it was sending
+  await settle();
+  release();
+  await settle();
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Attempt finished/);
+});
+
+test('finishing after the user left for somewhere else leaves no stale message for a later visit', async () => {
+  const [gate, release] = gateOf();
+  const { app, root, win } = setup({
+    processAttempt: async (t, id, d, o) => { if (o && o.finish) await gate; return { state: o && o.finish ? 'finished' : 'inprogress', warnings: [] }; },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/1';
+  await settle();
+  quizClick(root, 'Finish attempt');
+  await settle();
+  quizClick(root, 'Yes, submit');
+  await tick();
+  win.location.hash = '#/course/11';
+  await settle();
+  release();
+  await settle();
+  win.location.hash = '#/course/11/quiz/10';
+  await settle();
+  assert.equal(root.querySelector('.pane-detail .flash'), null);
+});
+
+test('the finish summary ignores description items and counts invalid answers as unanswered', async () => {
+  const { app, root, win } = setup({
+    getAttemptSummary: async () => ({ questions: [
+      { slot: 1, type: 'multichoice', state: 'complete' }, { slot: 2, type: 'truefalse', state: 'invalid' },
+      { slot: 3, type: 'description', state: 'complete' }, { slot: 4, type: 'multichoice', state: 'todo' },
+    ] }),
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/1';
+  await settle();
+  quizClick(root, 'Finish attempt');
+  await settle();
+  assert.match(root.querySelector('.pane-detail .confirm').textContent, /answered 1 of 3/);
+});
+
+test('a missing next page means the last page: no Next button, even if nextpage is null', async () => {
+  const { app, root, win } = setup({ getAttemptData: async () => ({ ...sampleAttemptPage(0, null) }) }, true);
+  await app.start();
+  win.location.hash = '#/course/11/quiz/10/attempt/77/0';
+  await settle();
+  assert.equal(hasButton(root, 'Next'), false);
+  assert.equal(hasButton(root, 'Finish attempt'), true);
 });

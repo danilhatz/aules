@@ -66,7 +66,7 @@ test('startCheck: unsupported rules, question types and pre-flight checks are re
   const types = startCheck({ ...ok(), qtypes: { questiontypes: ['multichoice', 'match', 'essay'] } });
   assert.equal(types.mode, 'unsupported');
   assert.deepEqual(types.unsupportedTypes, ['match', 'essay']);
-  const pre = startCheck({ ...ok(), attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } });
+  const pre = startCheck({ ...ok(), access: { canattempt: true, activerulenames: ['quizaccess_openclosedate'] }, attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } });
   assert.equal(pre.mode, 'unsupported'); assert.equal(pre.preflight, true);
 });
 
@@ -99,4 +99,33 @@ test('formatTimeLeft', () => {
   assert.equal(formatTimeLeft(9), '0:09');
   assert.equal(formatTimeLeft(0), '0:00');
   assert.equal(formatTimeLeft(-30), '0:00');
+});
+
+test('startCheck: a timed quiz can be started (the time-limit rule always asks for a pre-flight the start screen already explains)', () => {
+  const r = startCheck({ ...ok(), access: { canattempt: true, activerulenames: ['quizaccess_timelimit'] }, attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } });
+  assert.equal(r.mode, 'start'); assert.equal(r.canStart, true);
+});
+
+test('startCheck: a pre-flight that the time-limit rule does not explain stays unsupported', () => {
+  const none = startCheck({ ...ok(), access: { canattempt: true, activerulenames: [] }, attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } });
+  assert.equal(none.mode, 'unsupported'); assert.equal(none.preflight, true);
+  const other = startCheck({ ...ok(), access: { canattempt: true, activerulenames: ['quizaccess_openclosedate'] }, attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } });
+  assert.equal(other.mode, 'unsupported');
+  const foreign = startCheck({ ...ok(), access: { canattempt: true, activerulenames: ['quizaccess_timelimit', 'quizaccess_password'] }, attemptAccess: { preventnewattemptreasons: [], ispreflightcheckrequired: true } });
+  assert.equal(foreign.mode, 'unsupported');
+});
+
+test('startCheck: malformed pieces are unknown, never "fine"', () => {
+  const cases = [
+    { access: { canattempt: true } },
+    { qtypes: {} },
+    { attemptAccess: { ispreflightcheckrequired: false } },
+    { attemptAccess: { preventnewattemptreasons: [] } },
+    { access: { canattempt: true, activerulenames: 'quizaccess_timelimit' } },
+  ];
+  for (const c of cases) {
+    const r = startCheck({ ...ok(), ...c });
+    assert.equal(r.mode, 'unknown', JSON.stringify(c));
+    assert.equal(r.canStart, false);
+  }
 });

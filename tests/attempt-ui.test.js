@@ -44,7 +44,7 @@ const pick = (el, name, value) => { el.querySelector(`input[name="${name}"][valu
 test('renders every question with working controls and the page controls', () => {
   const { el } = mk();
   assert.equal(el.querySelectorAll('.question').length, 3);
-  assert.equal(el.querySelectorAll('input[type=radio][name="q5:1_answer"]').length, 3);
+  assert.equal(el.querySelectorAll('input[type=radio][name="q5:1_answer"]').length, 4);
   assert.ok(el.querySelector('input[type=text][name="q7:3_answer"]'));
   for (const t of ['Previous', 'Save', 'Next', 'Finish attempt']) assert.ok(btn(el, t), t);
   assert.equal(el.querySelector('a.back').getAttribute('href'), '#/course/11/quiz/10');
@@ -174,7 +174,7 @@ test('answers typed locally are reported for the local store and a given snapsho
 
 test('timer: counts down, locks the page at zero and turns Finish into Submit now with timeup=true; nothing is sent automatically', async () => {
   const t = mk({ endTime: 1100 });
-  assert.match(t.el.querySelector('.timer').textContent, /Time left: 1:40/);
+  assert.match(t.el.querySelector('.timer').textContent, /Time left \(approx\.\): 1:40/);
   t.clockNow.v = 1090;
   t.tick();
   assert.match(t.el.querySelector('.timer').textContent, /0:10/);
@@ -218,4 +218,31 @@ test('review renders questions read-only with the grade and Moodle\'s message as
   assert.ok([...el.querySelectorAll('input:not([type=hidden])')].every((i) => i.hasAttribute('disabled')));
   assert.equal(el.querySelector('button'), null);
   assert.equal(el.querySelector('a.back').getAttribute('href'), '#/course/11/quiz/10');
+});
+
+test('images in question markup (plain pluginfile URLs) get the webservice path and the token', () => {
+  const img = '<img src="https://aules.edu.gva.es/fpa/pluginfile.php/5/question/questiontext/1/2/map.png"><img src="https://example.org/x.png">';
+  const { el } = mk({ questions: [{ slot: 1, number: 1, type: 'multichoice', html: mcqHtml(5, 1) + img }] });
+  const srcs = [...el.querySelectorAll('img')].map((i) => i.getAttribute('src'));
+  assert.deepEqual(srcs, ['https://aules.edu.gva.es/fpa/webservice/pluginfile.php/5/question/questiontext/1/2/map.png?token=T', 'https://example.org/x.png']);
+  el.remove();
+  const review = renderReview({ courseId: 11, cmid: 10, quiz, grade: '', questions: [{ number: 1, html: img }], message: '', token: 'T' });
+  assert.match(review.querySelector('img').getAttribute('src'), /webservice\/pluginfile\.php\/5\/question\/questiontext\/1\/2\/map\.png\?token=T$/);
+});
+
+test('a timed quiz whose timer could not be loaded says so instead of staying silent', () => {
+  const timed = parseQuiz({ id: 3, coursemodule: 10, name: 'Test 1', timelimit: 600 });
+  const { el } = mk({ quiz: timed, endTime: 0 });
+  assert.equal(el.querySelector('.timer'), null);
+  assert.match(el.querySelector('.timer-missing').textContent, /time limit/i);
+  el.remove();
+  const untimed = mk({ endTime: 0 });
+  assert.equal(untimed.el.querySelector('.timer-missing'), null);
+  untimed.el.remove();
+});
+
+test('the time-up note is announced to screen readers', () => {
+  const { el } = mk({ endTime: 1100 });
+  assert.equal(el.querySelector('.time-up').getAttribute('role'), 'alert');
+  el.remove();
 });

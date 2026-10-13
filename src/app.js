@@ -555,29 +555,41 @@ export function createApp({
     const questions = (Array.isArray(data.questions) ? data.questions : []).map((q) => ({ slot: q.slot, number: q.number, type: q.type, html: q.html || '' }));
     const endTime = accessR.ok && accessR.v && Number(accessR.v.endtime) > 0 ? Number(accessR.v.endtime) : 0;
     const write = guardedWrite(epoch);
-    const goTo = (target) => { if (auth.epoch() === epoch) win.location.hash = `#/course/${courseId}/quiz/${cmid}/attempt/${attemptId}/${target}`; };
+    // After a write completes, only act if the user is still where they were (or already back on the quiz).
+    const goTo = (target) => {
+      if (!here()) return;
+      win.location.hash = `#/course/${courseId}/quiz/${cmid}/attempt/${attemptId}/${target}`;
+    };
     const leaveToQuiz = (kind) => {
       if (auth.epoch() !== epoch) return;
+      const target = `#/course/${courseId}/quiz/${cmid}`;
+      const v = view();
+      const onQuizScreen = v.type === 'quiz' && v.cmid === cmid;
+      if (!here() && !onQuizScreen) return; // the user went elsewhere: drop the message
       pendingQuizFlash = { key: `quiz:${cmid}`, kind };
-      win.location.hash = `#/course/${courseId}/quiz/${cmid}`; // the hashchange handler loads the quiz screen
+      if (win.location.hash === target) showRoute(); // same hash fires no hashchange: reload explicitly
+      else win.location.hash = target; // the hashchange handler loads the quiz screen
     };
     clear(detailPane).append(renderAttempt({
-      courseId, cmid, quiz, page, nextPage: Number.isFinite(Number(data.nextpage)) ? Number(data.nextpage) : -1,
+      courseId, cmid, quiz, page, nextPage: Number.isInteger(data.nextpage) ? data.nextpage : -1,
       sequential: quiz.sequential, questions, endTime, snapshot: attemptStore.get(attemptId, page),
       token: (auth.getSession() || session).token, openUrl: quizOpenUrl(cmid),
       actions: {
         save: async (answers) => {
           await sentOnce(() => write((s) => api.saveAttempt(s.token, attemptId, answers)));
           if (auth.epoch() !== epoch) throw new MoodleError('signedout');
+          attemptStore.removePage(attemptId, page); // saved on the server: the local copy must not override it later
         },
         go: async (answers) => {
           await sentOnce(() => write((s) => api.processAttempt(s.token, attemptId, answers, { finish: false })));
           if (auth.epoch() !== epoch) throw new MoodleError('signedout');
+          attemptStore.removePage(attemptId, page);
         },
         loadSummary: async () => {
           const r = await call((s) => api.getAttemptSummary(s.token, attemptId));
-          const qs = Array.isArray(r && r.questions) ? r.questions : [];
-          return { total: qs.length, answered: qs.filter((q) => q && !['todo', 'gaveup'].includes(q.state)).length };
+          // Descriptions are not questions; "invalid" (an incomplete answer) is not answered either.
+          const qs = (Array.isArray(r && r.questions) ? r.questions : []).filter((q) => q && q.type !== 'description');
+          return { total: qs.length, answered: qs.filter((q) => !['todo', 'gaveup', 'invalid'].includes(q.state)).length };
         },
         finish: async (answers, { timeup }) => {
           await sentOnce(() => write((s) => api.processAttempt(s.token, attemptId, answers, { finish: true, timeup })));

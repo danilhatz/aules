@@ -50,3 +50,13 @@ test('corrupt data is a miss; storage failures never throw; a failed data write 
   createAttemptStore(st2).clear();
   assert.equal(st2.getItem('aules.attempt.3'), null);
 });
+
+test('removePage drops only that page of one attempt', () => {
+  const s = createAttemptStore(createMemoryStorage());
+  s.set(9, 0, snap('a')); s.set(9, 1, snap('b')); s.set(10, 0, snap('c'));
+  s.removePage(9, 0);
+  assert.equal(s.get(9, 0), null);
+  assert.equal(s.get(9, 1).t['q5:1_answer'], 'b');
+  assert.equal(s.get(10, 0).t['q5:1_answer'], 'c');
+  assert.doesNotThrow(() => { s.removePage(9, 5); s.removePage(77, 0); });
+});
