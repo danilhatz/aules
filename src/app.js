@@ -20,6 +20,7 @@ import { createMemoryStorage } from './storage.js';
 import { describeError } from './errors.js';
 import { MoodleError } from './api.js';
 import { STRINGS as S } from './strings.js';
+import { renderLangSwitch } from './ui/langswitch.js';
 
 const assignmentsOf = (res) => (res && Array.isArray(res.courses) && res.courses[0] && Array.isArray(res.courses[0].assignments) ? res.courses[0].assignments : []);
 const safeCode = (c) => (typeof c === 'string' && /^[a-z][a-z_]{1,60}$/.test(c) ? c : 'error');
@@ -154,6 +155,7 @@ export function createApp({
         h('h1', {}, S.courses),
         h('a', { class: 'link', href: '#/diagnostics' }, S.diagnostics),
         h('button', { class: 'link', type: 'button', onclick: () => logout() }, S.logout)),
+      renderLangSwitch(),
       ...(offline ? [h('p', { class: 'banner' }, S.offline)] : []),
       renderCourseList({ courses, token, selectedId: route(), folderState }));
   }

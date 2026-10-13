@@ -147,3 +147,9 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .attempt-bar .btn { flex: 1 1 100px; margin-top: 0; }
 .que fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .que legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
+
+/* Language switch */
+.lang-switch { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.lang-switch select { font: inherit; font-size: 16px; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); padding: 0 8px; max-width: 150px; width: auto; }
+.login > .lang-switch { justify-content: center; margin-top: 12px; }
+.pane-list > .lang-switch { margin: 0 16px 8px; justify-content: flex-end; }

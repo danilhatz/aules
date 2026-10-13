@@ -1,6 +1,7 @@
 import { h } from './dom.js';
 import { STRINGS as S } from '../strings.js';
 import { describeError } from '../errors.js';
+import { renderLangSwitch } from './langswitch.js';
 
 export function renderLogin({ onSubmit, message = '' }) {
   const user = h('input', { id: 'user', name: 'username', type: 'text', inputmode: 'text', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', required: true });
@@ -28,5 +29,5 @@ export function renderLogin({ onSubmit, message = '' }) {
   h('label', { for: 'user' }, S.username), user,
   h('label', { for: 'pass' }, S.password), pass,
   msg, h('p', { class: 'muted' }, S.saveNote), btn);
-  return h('div', { class: 'login' }, form);
+  return h('div', { class: 'login' }, form, renderLangSwitch());
 }
