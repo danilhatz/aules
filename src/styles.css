@@ -69,3 +69,11 @@ td, th { border: 1px solid var(--border); padding: 4px 8px; }
   .pane-list { border-right: 1px solid var(--border); }
   .back { display: none; }
 }
+
+/* Category folders */
+.folders { padding: 0 0 8px; }
+.folder { margin: 0 16px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.folder > summary { display: flex; align-items: center; gap: 8px; padding: 14px 16px; min-height: 48px; font-weight: 600; cursor: pointer; }
+.folder-name { flex: 1; overflow-wrap: anywhere; }
+.count { min-width: 28px; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); font-size: 14px; text-align: center; }
+.folder .cards { padding: 0 12px 12px; }
