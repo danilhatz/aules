@@ -22,6 +22,7 @@ const SHELL = [
   "./src/sanitize.js",
   "./src/storage.js",
   "./src/store.js",
+  "./src/timings.js",
   "./src/strings.js",
   "./src/submit.js",
   "./src/styles.css",

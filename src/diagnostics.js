@@ -6,6 +6,7 @@ const SAFE_MOD = /^[a-z][a-z_]{1,30}$/;
 const SAFE_CODE = /^[a-z][a-z_]{1,60}$/;
 const SAFE_CALL = /^[a-z][a-z0-9_]{2,80}$/;
 const SAFE_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,40}$/;
+const SAFE_TIMING_NAME = /^[A-Za-z][A-Za-z0-9]{2,40}$/;
 
 const CHECKS = [
   'core_course_get_enrolled_courses_by_timeline_classification', 'core_course_get_categories',
@@ -56,6 +57,13 @@ export function buildReport(d) {
     .filter(([k]) => SAFE_CALL.test(k))
     .map(([k, v]) => `${k}: ${typeof v === 'string' && SAFE_CODE.test(v) ? v : 'error'}`);
 
+  // Only the API function name, milliseconds and size are ever printed (no URLs, tokens or data).
+  const timingLines = (Array.isArray(d.timings) ? d.timings : [])
+    .filter((t) => t && SAFE_TIMING_NAME.test(t.name) && Number.isFinite(t.ms) && Number.isFinite(t.bytes))
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, 12)
+    .map((t) => `  ${t.name}: ${t.ms} ms, ${Math.round(t.bytes / 1024)} KB${t.failed ? ', failed' : ''}`);
+
   const lines = [
     'Aules diagnostics',
     `Moodle release: ${safeText(info.release)}`,
@@ -73,6 +81,8 @@ export function buildReport(d) {
     ...CHECKS.map((n) => `  ${n}: ${fns.has(n) ? 'yes' : 'no'}`),
     `Web-service functions available (${fns.size}):`,
     [...fns].sort().join(', ') || '  none reported',
+    'Call timings (slowest first):',
+    ...(timingLines.length ? timingLines : ['  none']),
     'Call errors:',
     ...(errors.length ? errors.map((e) => `  ${e}`) : ['  none']),
     'Data shapes (keys and types only):',
