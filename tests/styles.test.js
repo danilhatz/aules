@@ -11,3 +11,9 @@ test('category-folder styles are scoped to details.folder so Aules "Folder" acti
   assert.deepEqual(bare, []);
   assert.ok(selectors.some((s) => s.startsWith('details.folder')));
 });
+
+test('folders and units show an expand/collapse chevron (summary markers are removed by display:flex)', () => {
+  assert.ok(css.includes('details.folder > summary::after'));
+  assert.ok(css.includes('.unit > summary::after'));
+  assert.ok(css.includes('[open] > summary::after'));
+});

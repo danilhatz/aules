@@ -15,7 +15,7 @@ No writes to Aules, no assignments/quizzes/forums, no tab bar (added when the To
 
 ## Category folders
 Source order (first that works wins, per session; failure falls through, never errors the screen):
-1. `core_course_get_enrolled_courses_by_timeline_classification` (`classification: "all"`, `limit: 0`) -> each course has `coursecategory` (name), `progress`, `courseimageurl`/`overviewfiles`.
+1. `core_course_get_enrolled_courses_by_timeline_classification` (`classification: "allincludinghidden"`, `limit: 0`; plain `"all"` would drop courses the user hid on the Aules dashboard. Older sites that reject the value fall through to source 2) -> each course has `coursecategory` (name), `progress`, `courseimageurl`/`overviewfiles`.
 2. `core_enrol_get_users_courses` (existing) for `category` id + `core_course_get_categories` (`criteria[0][key]=ids`) for names/paths.
 3. No category info -> flat list, exactly today's behaviour.
 

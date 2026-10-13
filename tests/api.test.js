@@ -80,7 +80,7 @@ test('getCoursesByTimeline requests all courses without a limit', async () => {
   assert.deepEqual(r, { courses: [{ id: 1 }] });
   const b = new URLSearchParams(calls[0].opts.body.toString());
   assert.equal(b.get('wsfunction'), 'core_course_get_enrolled_courses_by_timeline_classification');
-  assert.equal(b.get('classification'), 'all');
+  assert.equal(b.get('classification'), 'allincludinghidden');
   assert.equal(b.get('limit'), '0');
 });
 

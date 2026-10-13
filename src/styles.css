@@ -93,3 +93,9 @@ details.folder .cards { padding: 0 12px 12px; }
 .diagnostics .btn { width: calc(100% - 32px); margin: 0 16px; }
 .diagnostics .copy-msg { margin: 8px 16px; }
 .bar .link { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* Expand/collapse chevrons (display:flex on <summary> removes the native marker) */
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+details.folder > summary::after, .unit > summary::after { content: ''; flex: none; width: 8px; height: 8px; margin: 0 4px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; }
+details.folder[open] > summary::after, .unit[open] > summary::after { transform: rotate(45deg); }

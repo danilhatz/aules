@@ -26,12 +26,22 @@ export function renderCourseList({ courses, token, selectedId, folderState }) {
 
   const entries = groups.map((g) => ({ g, lis: g.courses.map((c) => card(c, token, selectedId)) }));
   const details = [];
+  // The open state the code itself last set. Browsers fire a `toggle` event for programmatic opens too;
+  // only a state that differs from this is a real user choice worth saving.
+  const expected = [];
   const body = asFolders
     ? h('div', { class: 'folders' }, entries.map(({ g, lis }) => {
-      const d = h('details', { class: 'folder', open: wantOpen(g) },
+      const initial = wantOpen(g);
+      const i = details.length;
+      const d = h('details', { class: 'folder', open: initial },
         h('summary', {}, h('span', { class: 'folder-name' }, g.name), h('span', { class: 'count' }, String(g.courses.length))),
         h('ul', { class: 'cards' }, lis));
-      d.addEventListener('toggle', () => { if (!searching && folderState) folderState.set(g.name, d.open); });
+      expected[i] = initial;
+      d.addEventListener('toggle', () => {
+        if (searching || d.open === expected[i]) return;
+        expected[i] = d.open;
+        if (folderState) folderState.set(g.name, d.open);
+      });
       details.push(d);
       return d;
     }))
@@ -55,7 +65,8 @@ export function renderCourseList({ courses, token, selectedId, folderState }) {
         shown += hits;
         if (asFolders) {
           details[i].hidden = hits === 0;
-          details[i].open = q ? hits > 0 : wantOpen(g);
+          expected[i] = q ? hits > 0 : wantOpen(g);
+          details[i].open = expected[i];
         }
       });
       empty.hidden = shown > 0;

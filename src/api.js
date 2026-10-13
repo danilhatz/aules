@@ -57,7 +57,7 @@ export const getCourseContents = (token, courseId, { fetchImpl } = {}) =>
   ws(token, 'core_course_get_contents', { courseid: courseId }, fetchImpl);
 
 export const getCoursesByTimeline = (token, { fetchImpl } = {}) =>
-  ws(token, 'core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0 }, fetchImpl);
+  ws(token, 'core_course_get_enrolled_courses_by_timeline_classification', { classification: 'allincludinghidden', limit: 0 }, fetchImpl);
 
 export const getCategories = (token, ids, { fetchImpl } = {}) =>
   ws(token, 'core_course_get_categories', { 'criteria[0][key]': 'ids', 'criteria[0][value]': ids.join(','), addsubcategories: 0 }, fetchImpl);

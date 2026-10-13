@@ -178,3 +178,13 @@ test('course view without progress shows no progress bar', () => {
   const el = renderCourse({ course: { id: 1, fullname: 'X', sections: buildCourse(sampleSections, 'T') }, token: 'T' });
   assert.equal(el.querySelector('progress'), null);
 });
+
+test('opening folders automatically (selected course / default) never overwrites what the user saved', async () => {
+  const storage = createMemoryStorage();
+  const folderState = createFolderState(storage);
+  folderState.set('Español A1', false); // the user closed it earlier
+  renderCourseList({ courses: cats, token: 'T', selectedId: 1, folderState }); // selecting a course forces A1 open
+  await new Promise((r) => setTimeout(r, 15));
+  assert.equal(createFolderState(storage).get('Español A1'), false);
+  assert.equal(createFolderState(storage).get('Español B1'), undefined); // defaults are never persisted
+});
