@@ -15,7 +15,8 @@ export function withToken(url, token) {
   return u.toString();
 }
 
-const PLAIN_PREFIX = `${SITE.pathname}/pluginfile.php/`;
+const SOON = new Set(['assign', 'quiz', 'forum']);
+const PLAIN_PREFIX =`${SITE.pathname}/pluginfile.php/`;
 
 // Moodle hands out plain /pluginfile.php/ image URLs in some responses; the token only works on the webservice path.
 export function toWebserviceUrl(url) {
@@ -35,7 +36,7 @@ function fileLinks(files, token, labelOf) {
 }
 
 function buildModule(m, token) {
-  const base = { id: m.id, name: m.name || '', description: m.description || '', links: [] };
+  const base = { id: m.id, name: m.name || '', modname: m.modname || '', description: m.description || '', links: [] };
   const files = (m.contents || []).filter((c) => c.type === 'file');
   switch (m.modname) {
     case 'label':
@@ -52,7 +53,7 @@ function buildModule(m, token) {
       return { ...base, kind: 'url', links };
     }
     default:
-      return { ...base, kind: 'other', unsupported: true };
+      return { ...base, kind: 'other', unsupported: true, ...(SOON.has(m.modname) ? { soon: true } : {}) };
   }
 }
 
@@ -60,6 +61,7 @@ export function buildCourse(sections, token) {
   return (sections || [])
     .map((s, i) => ({
       id: s.id,
+      number: s.section ?? i,
       name: (s.name || '').trim() || `${S.section} ${s.section ?? i}`,
       summary: s.summary || '',
       modules: (s.modules || []).filter((m) => m.uservisible !== false).map((m) => buildModule(m, token)),

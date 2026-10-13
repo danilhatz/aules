@@ -80,3 +80,24 @@ test('toWebserviceUrl rewrites only this instance\'s plain pluginfile URLs', () 
   assert.equal(toWebserviceUrl('https://evil.example/fpa/pluginfile.php/5/a.png'), 'https://evil.example/fpa/pluginfile.php/5/a.png');
   assert.equal(toWebserviceUrl('not a url'), 'not a url');
 });
+
+test('modules carry modname; assign/quiz/forum are marked soon; other unsupported types are not', () => {
+  const [, unit] = buildCourse(sampleSections, 'T');
+  const byName = Object.fromEntries(unit.modules.map((m) => [m.name, m]));
+  assert.equal(byName.Questions.modname, 'forum');
+  assert.equal(byName.Questions.soon, true);
+  assert.equal(byName.Glossary.unsupported, true);
+  assert.equal(byName.Glossary.soon, undefined);
+  assert.equal(byName.Reading.modname, 'page');
+  const v = buildCourse([{ id: 1, section: 0, name: 'S', summary: '', modules: [
+    { id: 1, name: 'HW', modname: 'assign' }, { id: 2, name: 'Q', modname: 'quiz' }, { id: 3, name: 'X' },
+  ] }], 'T');
+  assert.deepEqual(v[0].modules.map((m) => [m.modname, Boolean(m.soon)]), [['assign', true], ['quiz', true], ['', false]]);
+});
+
+test('sections carry their Moodle section number', () => {
+  const v = buildCourse(sampleSections, 'T');
+  assert.deepEqual(v.map((s) => s.number), [0, 1]);
+  const w = buildCourse([{ id: 1, name: 'A', summary: '<p>x</p>' }], 'T');
+  assert.equal(w[0].number, 0);
+});

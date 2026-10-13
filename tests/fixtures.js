@@ -22,6 +22,7 @@ export const sampleSections = [
       { id: 5, name: 'Reading', modname: 'page', uservisible: true, contents: [{ type: 'file', filename: 'index.html', fileurl: `${F}/7/mod_page/content/index.html` }] },
       { id: 6, name: 'Secret', modname: 'resource', uservisible: false, contents: [] },
       { id: 7, name: 'Questions', modname: 'forum', uservisible: true },
+      { id: 8, name: 'Glossary', modname: 'glossary', uservisible: true },
     ],
   },
   { id: 102, section: 2, name: 'Empty', summary: '', modules: [] },

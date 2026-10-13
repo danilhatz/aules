@@ -150,7 +150,8 @@ test('course view: sections, safe label html, token on file links, first section
   assert.match(link.getAttribute('href'), /token=T/);
   assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
   assert.equal(link.getAttribute('target'), '_blank');
-  assert.ok(el.textContent.includes('Not available in this app yet'));
+  assert.ok(el.textContent.includes('Not available in this app yet')); // glossary (unknown type)
+  assert.ok([...el.querySelectorAll('.soon')].some((n) => n.textContent === 'Coming soon')); // forum
   assert.equal(el.querySelector('a.back').getAttribute('href'), '#/');
 });
 
@@ -158,4 +159,22 @@ test('course view with no sections and offline banner', () => {
   const el = renderCourse({ course: { id: 1, fullname: 'X', sections: [] }, token: 'T', offline: true });
   assert.ok(el.textContent.includes('This course has no content'));
   assert.ok(el.querySelector('.banner'));
+});
+
+test('course view shows unit numbers (not for section 0), type chips and progress', () => {
+  const sections = buildCourse(sampleSections, 'T');
+  const el = renderCourse({ course: { id: 11, fullname: 'Programació', sections, progress: 40 }, token: 'T' });
+  const units = el.querySelectorAll('details.unit');
+  assert.equal(units[0].querySelector('.unit-no'), null);
+  assert.equal(units[1].querySelector('.unit-no').textContent, '1');
+  assert.equal(units[1].querySelector('.unit-name').textContent, 'Section 1');
+  const chips = [...el.querySelectorAll('.chip')].map((c) => c.textContent);
+  for (const t of ['File', 'Link', 'Folder', 'Reading', 'Forum', 'Activity']) assert.ok(chips.includes(t), t);
+  assert.equal(el.querySelector('.mod.label .chip'), null);
+  assert.equal(el.querySelector('progress.course-progress').value, 40);
+});
+
+test('course view without progress shows no progress bar', () => {
+  const el = renderCourse({ course: { id: 1, fullname: 'X', sections: buildCourse(sampleSections, 'T') }, token: 'T' });
+  assert.equal(el.querySelector('progress'), null);
 });

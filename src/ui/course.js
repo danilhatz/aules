@@ -13,12 +13,17 @@ function html(cls, raw, opts) {
   return d;
 }
 
+function chip(m) {
+  if (m.kind === 'label') return null;
+  return h('span', { class: `chip chip-${m.modname || m.kind}` }, S.types[m.modname] || S.types.other);
+}
+
 function renderModule(m, opts) {
   if (m.kind === 'label') return h('li', { class: 'mod label' }, html('html', m.description, opts));
   const linkOnly = (m.kind === 'url' || m.kind === 'page') && m.links.length > 0;
   return h('li', { class: `mod ${m.kind}` },
-    linkOnly ? null : h('span', { class: 'mod-name' }, m.name),
-    m.unsupported ? h('small', { class: 'muted' }, S.unsupported) : null,
+    h('div', { class: 'mod-head' }, chip(m), linkOnly ? null : h('span', { class: 'mod-name' }, m.name)),
+    m.unsupported ? h('small', { class: 'muted soon' }, m.soon ? S.comingSoon : S.unsupported) : null,
     m.description ? html('html small', m.description, opts) : null,
     m.links.length
       ? h('ul', { class: 'links' }, m.links.map((l) => h('li', {}, h('a', { href: l.href, target: '_blank', rel: 'noopener noreferrer' }, l.label))))
@@ -26,8 +31,10 @@ function renderModule(m, opts) {
 }
 
 function renderSection(s, open, opts) {
-  return h('details', { class: 'section', open },
-    h('summary', {}, s.name),
+  return h('details', { class: 'section unit', open },
+    h('summary', {},
+      s.number > 0 ? h('span', { class: 'unit-no', 'aria-hidden': 'true' }, String(s.number)) : null,
+      h('span', { class: 'unit-name' }, s.name)),
     s.summary ? html('html', s.summary, opts) : null,
     h('ul', { class: 'modules' }, s.modules.map((m) => renderModule(m, opts))));
 }
@@ -40,6 +47,7 @@ export function renderCourse({ course, token, offline }) {
     : h('p', { class: 'status' }, S.noContent);
   return h('article', { class: 'course' },
     h('header', { class: 'bar' }, renderBack(), h('h2', {}, course.fullname)),
+    typeof course.progress === 'number' ? h('progress', { class: 'course-progress', max: 100, value: Math.round(course.progress) }) : null,
     offline ? h('p', { class: 'banner' }, S.offline) : null,
     body);
 }
