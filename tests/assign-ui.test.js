@@ -29,7 +29,7 @@ function mk(over = {}) {
   const typed = [];
   const props = {
     courseId: 11, assignment: parseAssignment(rawA()), status: parseStatus(rawS()),
-    editability: { editable: true, reason: '' }, uploadAvailable: true, maxBytes: 0, draftText: null, token: 'T',
+    editability: { editable: true, reason: '' }, uploadState: 'ok', maxBytes: 0, draftText: null, staleDraft: null, onDiscardDraft: () => {}, token: 'T',
     offline: false, now: NOW, locale: 'en', flash: '',
     actions: { send: async (i) => { sent.push(i); } }, onDone: (k) => done.push(k), onTextInput: (t) => typed.push(t), ...over,
   };
@@ -58,7 +58,7 @@ test('form shows the existing answer; the file section depends on plugin and upl
   assert.equal(a.el.querySelector('textarea').value, 'mi respuesta');
   assert.ok(a.el.querySelector('input[type=file]'));
   a.el.remove();
-  const b = mk({ uploadAvailable: false });
+  const b = mk({ uploadState: 'failed' });
   assert.equal(b.el.querySelector('input[type=file]'), null);
   assert.match(b.el.textContent, /not available for your account/);
   b.el.remove();
@@ -185,8 +185,8 @@ test('a failing write shows a message, re-enables the buttons and does not repor
   el.remove();
 });
 
-test('a network error during a write reports an unknown outcome instead of success', async () => {
-  const { el, done } = mk({ actions: { send: async () => { throw new MoodleError('network'); } } });
+test('an unconfirmed outcome refreshes instead of reporting success', async () => {
+  const { el, done } = mk({ actions: { send: async () => { throw new MoodleError('unconfirmed'); } } });
   btn(el, 'Save draft').click();
   await tick();
   assert.deepEqual(done, ['unknown']);
@@ -263,5 +263,127 @@ test('flash messages and graded feedback render safely', () => {
   assert.match(el.querySelector('.grade').textContent, /8,00 \/ 10,00/);
   assert.match(el.querySelector('.feedback').textContent, /Bien/);
   assert.ok(!/onerror/.test(el.innerHTML));
+  el.remove();
+});
+
+test('upload states: ok shows the picker; unknown asks for the Test upload first; failed says unavailable; existing files stay visible', () => {
+  const ok = mk({ uploadState: 'ok' });
+  assert.ok(ok.el.querySelector('input[type=file]'));
+  ok.el.remove();
+  const unk = mk({ uploadState: 'unknown' });
+  assert.equal(unk.el.querySelector('input[type=file]'), null);
+  assert.match(unk.el.textContent, /Test upload/);
+  assert.ok(unk.el.querySelector('a[href*="foto.jpg"]')); // the existing attachment is still listed
+  unk.el.remove();
+  const bad = mk({ uploadState: 'failed' });
+  assert.match(bad.el.textContent, /not available for your account/);
+  bad.el.remove();
+});
+
+test('while a send is in flight the whole answer area is locked, and unlocked again after an error', async () => {
+  let fail; const gate = new Promise((_, rej) => { fail = rej; });
+  const { el } = mk({ actions: { send: async () => { await gate; } } });
+  const fields = el.querySelector('fieldset');
+  assert.equal(fields.disabled, false);
+  btn(el, 'Save draft').click();
+  assert.equal(fields.disabled, true);
+  fail(new MoodleError('submissionclosed', 'Closed'));
+  await tick();
+  assert.equal(fields.disabled, false);
+  el.remove();
+});
+
+test('only an unconfirmed outcome refreshes; a plain network error before sending shows a message; signedout is silent', async () => {
+  const a = mk({ actions: { send: async () => { throw new MoodleError('network'); } } });
+  btn(a.el, 'Save draft').click();
+  await tick();
+  assert.match(a.el.querySelector('.form-msg').textContent, /Cannot reach Aules/);
+  assert.deepEqual(a.done, []);
+  assert.equal(btn(a.el, 'Save draft').disabled, false);
+  a.el.remove();
+  const b = mk({ actions: { send: async () => { throw new MoodleError('signedout'); } } });
+  btn(b.el, 'Save draft').click();
+  await tick();
+  assert.equal(b.el.querySelector('.form-msg').textContent, '');
+  assert.deepEqual(b.done, []);
+  b.el.remove();
+});
+
+const formattedStatus = () => parseStatus(rawS({ lastattempt: { submission: { status: 'draft', plugins: [{ type: 'onlinetext', editorfields: [{ text: '<p>hola <strong>mundo</strong></p>' }] }, { type: 'file', fileareas: [{ area: 'submission_files', files: [] }] }] }, canedit: true } }));
+
+test('formatted website text blocks file changes until the student chooses to replace it', async () => {
+  const { el, sent } = mk({ status: formattedStatus() });
+  setFiles(el.querySelector('input[type=file]'), [F('a.pdf')]);
+  btn(el, 'Save draft').click();
+  await tick();
+  assert.equal(sent.length, 0);
+  assert.match(el.querySelector('.form-msg').textContent, /formatting from the website/);
+  btn(el, 'Replace with plain text').click();
+  btn(el, 'Save draft').click();
+  await tick();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].existing.simple, false);
+  el.remove();
+});
+
+test('the send input carries the existing answer so the companion editor can be built', async () => {
+  const { el, sent } = mk();
+  btn(el, 'Save draft').click();
+  await tick();
+  assert.deepEqual(sent[0].existing, { plain: 'mi respuesta', simple: true });
+  el.remove();
+});
+
+test('files with the same name (camera photos are all image.jpg) get unique names, also against kept files', async () => {
+  const { el, sent } = mk();
+  const input = el.querySelector('input[type=file]');
+  setFiles(input, [F('image.jpg'), F('image.jpg'), F('foto.jpg')]);
+  const names = [...el.querySelectorAll('.files li')].map((li) => li.textContent);
+  assert.ok(names.some((n) => n.startsWith('image.jpg')));
+  assert.ok(names.some((n) => n.startsWith('image (2).jpg')));
+  assert.ok(names.some((n) => n.startsWith('foto (2).jpg'))); // foto.jpg is already attached
+  btn(el, 'Save draft').click();
+  await tick();
+  assert.deepEqual(sent[0].files.added.map((f) => f.name), ['image.jpg', 'image (2).jpg', 'foto (2).jpg']);
+  el.remove();
+});
+
+test('a stale local draft is offered, never applied silently; Restore fills it, Discard removes it', async () => {
+  const discarded = [];
+  const a = mk({ staleDraft: { text: 'borrador viejo', savedAt: 1700000000000 }, onDiscardDraft: () => discarded.push(1) });
+  const ta = a.el.querySelector('textarea');
+  assert.equal(ta.value, 'mi respuesta');
+  assert.match(a.el.querySelector('.stale-draft').textContent, /unsaved text/i);
+  btn(a.el, 'Restore').click();
+  assert.equal(ta.value, 'borrador viejo');
+  assert.equal(a.el.querySelector('.stale-draft').hidden, true);
+  assert.ok(a.typed.includes('borrador viejo'));
+  a.el.remove();
+  const b = mk({ staleDraft: { text: 'borrador viejo', savedAt: 1700000000000 }, onDiscardDraft: () => discarded.push(1) });
+  btn(b.el, 'Discard').click();
+  assert.equal(b.el.querySelector('.stale-draft').hidden, true);
+  assert.equal(b.el.querySelector('textarea').value, 'mi respuesta');
+  assert.deepEqual(discarded, [1]);
+  b.el.remove();
+});
+
+test('restoring a stale draft over formatted website text is an explicit choice that enables replacing', async () => {
+  const { el, sent } = mk({ status: formattedStatus(), staleDraft: { text: 'borrador', savedAt: 1700000000000 } });
+  const ta = el.querySelector('textarea');
+  assert.equal(ta.disabled, true);
+  btn(el, 'Restore').click();
+  assert.equal(ta.disabled, false);
+  assert.equal(ta.value, 'borrador');
+  btn(el, 'Save draft').click();
+  await tick();
+  assert.equal(sent[0].textChanged, true);
+  assert.equal(sent[0].text, 'borrador');
+  el.remove();
+});
+
+test('an automatically restored draft is ignored when the server text is formatted (never skips the Replace step)', () => {
+  const { el } = mk({ status: formattedStatus(), draftText: 'borrador' });
+  assert.equal(el.querySelector('textarea').disabled, true);
+  assert.notEqual(el.querySelector('textarea').value, 'borrador');
   el.remove();
 });

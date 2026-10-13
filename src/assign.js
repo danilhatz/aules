@@ -76,6 +76,7 @@ export function parseStatus(raw) {
   const grade = fb.gradefordisplay ? stripTags(String(fb.gradefordisplay)) : '';
   return {
     status: ['new', 'draft', 'submitted', 'reopened'].includes(sub.status) ? sub.status : 'new',
+    attempt: num(sub.attemptnumber),
     canEdit: last.canedit === true,
     canSubmit: last.cansubmit === true,
     locked: last.locked === true,
@@ -87,6 +88,9 @@ export function parseStatus(raw) {
     feedbackHtml: cField && cField.text ? String(cField.text) : '',
   };
 }
+
+// Identifies the server-side text a local draft was typed against (attempt + html).
+export const draftBase = (status) => `${status.attempt}|${status.text.html}`;
 
 export function badgeState(status) {
   if (status.graded || status.gradeText) return 'graded';

@@ -23,8 +23,9 @@ function errorText(err) {
 function buildForm(p, opts) {
   const a = p.assignment;
   const existing = p.status.text;
-  const restored = p.draftText != null;
-  let replaceFormatted = existing.simple || restored;
+  // An automatically restored draft is only ever applied over plain (non-formatted) server text.
+  const restored = p.draftText != null && existing.simple;
+  let replaceFormatted = existing.simple;
   let kept = p.status.files.slice();
   let removedAny = false;
   const added = [];
@@ -42,18 +43,36 @@ function buildForm(p, opts) {
     if (!replaceFormatted) textarea.disabled = true;
   }
   const formattedNote = textarea && !replaceFormatted ? h('p', { class: 'note' }, S.formattedNote) : null;
+  const enableReplace = () => {
+    replaceFormatted = true;
+    textarea.disabled = false;
+    if (replaceBtn) replaceBtn.hidden = true;
+    if (formattedNote) formattedNote.hidden = true;
+  };
   const replaceBtn = textarea && !replaceFormatted
-    ? h('button', {
+    ? h('button', { type: 'button', class: 'btn secondary', onclick: () => { enableReplace(); textarea.focus(); } }, S.replaceFormatted)
+    : null;
+
+  // A draft typed against different server text is offered, never applied silently.
+  const stale = p.staleDraft;
+  let staleBox = null;
+  if (stale && textarea) {
+    const when = new Intl.DateTimeFormat(p.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(stale.savedAt));
+    const restoreBtn = h('button', {
       type: 'button', class: 'btn secondary',
       onclick: () => {
-        replaceFormatted = true;
-        textarea.disabled = false;
-        replaceBtn.hidden = true;
-        formattedNote.hidden = true;
-        textarea.focus();
+        enableReplace(); // restoring over formatted text is an explicit choice to replace it
+        textarea.value = stale.text;
+        staleBox.hidden = true;
+        if (p.onTextInput) p.onTextInput(stale.text);
       },
-    }, S.replaceFormatted)
-    : null;
+    }, S.restore);
+    const discardBtn = h('button', {
+      type: 'button', class: 'btn secondary',
+      onclick: () => { staleBox.hidden = true; if (p.onDiscardDraft) p.onDiscardDraft(); },
+    }, S.discard);
+    staleBox = h('div', { class: 'stale-draft', role: 'group' }, h('p', {}, `${S.staleDraft} (${when}).`), restoreBtn, discardBtn);
+  }
 
   const fileList = h('ul', { class: 'links files' });
   const renderFiles = () => {
@@ -65,32 +84,51 @@ function buildForm(p, opts) {
         h('button', { type: 'button', class: 'link remove', onclick: () => { added.splice(added.indexOf(f), 1); renderFiles(); } }, S.remove))),
     );
   };
-  const fileInput = a.plugins.file && p.uploadAvailable
+  // iOS names every camera capture "image.jpg" and Moodle rejects duplicate names in one draft area.
+  const uniqueName = (name) => {
+    const taken = new Set([...kept.map((k) => k.name), ...added.map((f) => f.name)].map((n) => n.toLowerCase()));
+    if (!taken.has(name.toLowerCase())) return name;
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    for (let i = 2; ; i += 1) {
+      const candidate = `${base} (${i})${ext}`;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
+    }
+  };
+  const uploadOk = a.plugins.file && p.uploadState === 'ok';
+  const fileInput = uploadOk
     ? h('input', {
       type: 'file', multiple: true, 'aria-label': S.addFiles,
       onchange: () => {
+        const FileCtor = (globalThis.window && globalThis.window.File) || globalThis.File;
         for (const f of Array.from(fileInput.files || [])) {
           if (p.maxBytes && f.size > p.maxBytes) { say(`${S.fileTooBig} (${f.name})`); continue; }
           if (a.maxFiles && kept.length + added.length >= a.maxFiles) { say(S.tooManyFiles); break; }
-          added.push(f);
+          const name = uniqueName(f.name);
+          added.push(name === f.name ? f : new FileCtor([f], name, { type: f.type }));
         }
         fileInput.value = '';
         renderFiles();
       },
     })
     : null;
-  if (a.plugins.file) renderFiles();
+  if (uploadOk) renderFiles();
 
   const hasContent = () => (textarea && textarea.value.trim() !== '') || kept.length + added.length > 0;
+  const filesChanged = () => removedAny || added.length > 0;
+  const blockedByFormatting = () => Boolean(textarea) && !existing.simple && !replaceFormatted && filesChanged();
   const collect = (submit, acceptStatement) => ({
     submit,
     acceptStatement,
     text: textarea ? textarea.value : '',
     // Opting to replace formatted text counts as a change even if the plain text is identical.
     textChanged: Boolean(textarea) && replaceFormatted && (!existing.simple || textarea.value !== existing.plain),
-    files: { changed: removedAny || added.length > 0, keep: kept.map((f) => ({ name: f.name, url: f.url })), added: added.slice() },
+    existing: { plain: existing.plain, simple: existing.simple },
+    files: { changed: filesChanged(), keep: kept.map((f) => ({ name: f.name, url: f.url })), added: added.slice() },
   });
-  const setBusy = (b) => { busy = b; for (const x of buttons) x.disabled = b; };
+  const fields = h('fieldset', { class: 'answer-fields' });
+  const setBusy = (b) => { busy = b; fields.disabled = b; for (const x of buttons) x.disabled = b; };
   const run = async (submit, acceptStatement) => {
     if (busy) return;
     setBusy(true);
@@ -99,9 +137,11 @@ function buildForm(p, opts) {
       await p.actions.send(collect(submit, acceptStatement));
       p.onDone(submit ? 'submitted' : 'saved');
     } catch (err) {
-      if (err && err.code === 'network') { p.onDone('unknown'); return; }
+      if (err && err.code === 'signedout') return;
+      if (err && err.code === 'unconfirmed') { p.onDone('unknown'); return; }
       say(errorText(err));
       setBusy(false);
+      if (accept) confirmBtn.disabled = !accept.checked;
     }
   };
 
@@ -118,20 +158,38 @@ function buildForm(p, opts) {
   const submitBtn = h('button', {
     type: 'button', class: 'btn',
     onclick: () => {
+      if (blockedByFormatting()) { say(S.formattedBlocksFiles); return; }
       if (!hasContent() && !canSubmitExistingDraft) { say(S.nothingToSend); return; }
       say('');
       confirm.hidden = false;
     },
   }, a.drafts ? S.submitForGrading : S.submit);
   const saveBtn = a.drafts
-    ? h('button', { type: 'button', class: 'btn secondary', onclick: () => { if (!hasContent()) { say(S.nothingToSend); return; } run(false, false); } }, S.saveDraft)
+    ? h('button', {
+      type: 'button', class: 'btn secondary',
+      onclick: () => {
+        if (blockedByFormatting()) { say(S.formattedBlocksFiles); return; }
+        if (!hasContent()) { say(S.nothingToSend); return; }
+        run(false, false);
+      },
+    }, S.saveDraft)
     : null;
   for (const b of [saveBtn, submitBtn, confirmBtn, cancelBtn, replaceBtn]) if (b) buttons.push(b);
 
-  return h('form', { class: 'answer-form', novalidate: true, onsubmit: (e) => e.preventDefault() },
-    textarea, formattedNote, replaceBtn,
-    a.plugins.file ? (fileInput ? h('div', { class: 'files-box' }, fileList, fileInput) : h('p', { class: 'note' }, S.uploadUnavailable)) : null,
-    msg, h('div', { class: 'actions' }, saveBtn, submitBtn), confirm);
+  let fileSection = null;
+  if (a.plugins.file) {
+    fileSection = uploadOk
+      ? h('div', { class: 'files-box' }, fileList, fileInput)
+      : h('div', { class: 'files-box' },
+        p.status.files.length ? fileLinks(p.status.files, p.token) : null,
+        h('p', { class: 'note' }, p.uploadState === 'failed' ? S.uploadUnavailable : S.uploadUntested));
+  }
+
+  fields.append(
+    ...[staleBox, textarea, formattedNote, replaceBtn, fileSection, msg,
+      h('div', { class: 'actions' }, saveBtn, submitBtn), confirm].filter(Boolean),
+  );
+  return h('form', { class: 'answer-form', novalidate: true, onsubmit: (e) => e.preventDefault() }, fields);
 }
 
 function readOnly(p, opts) {

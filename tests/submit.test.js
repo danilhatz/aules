@@ -47,13 +47,13 @@ test('files-only edit re-attaches kept files then uploads new ones into one draf
   });
   assert.deepEqual(r, { saved: true, submitted: false });
   assert.deepEqual(downloads, [`${FURL}?token=T`]);
-  assert.deepEqual(calls, [['upload', 'foto.jpg', 0], ['upload', 'nueva.pdf', 900], ['save', 42, { files_filemanager: 900 }]]);
+  assert.deepEqual(calls, [['upload', 'foto.jpg', 0], ['upload', 'nueva.pdf', 900], ['save', 42, { files_filemanager: 900, onlinetext_editor: { text: '', format: 1, itemid: 0 } }]]);
 });
 
 test('removing every file saves an empty draft area', async () => {
   const { api, calls } = fakeApi();
   await performSubmission({ api, write, assignment: assignment(), input: input({ files: { changed: true, keep: [], added: [] } }) });
-  assert.deepEqual(calls, [['draftid'], ['save', 42, { files_filemanager: 555 }]]);
+  assert.deepEqual(calls, [['draftid'], ['save', 42, { files_filemanager: 555, onlinetext_editor: { text: '', format: 1, itemid: 0 } }]]);
 });
 
 test('a kept file that cannot be re-fetched aborts before anything is saved', async () => {
@@ -107,8 +107,56 @@ test('without drafts, submit with changes saves only (saving already submits)', 
   assert.ok(!calls.some((c) => c[0] === 'submit'));
 });
 
-test('a network error during save propagates and nothing else runs', async () => {
+test('a network error during save is an unconfirmed outcome and nothing else runs', async () => {
   const { api, calls } = fakeApi({ saveSubmission: async () => { throw new MoodleError('network'); } });
-  await assert.rejects(() => performSubmission({ api, write, assignment: assignment(), input: input({ submit: true, text: 'a', textChanged: true }) }), (e) => e.code === 'network');
+  await assert.rejects(() => performSubmission({ api, write, assignment: assignment(), input: input({ submit: true, text: 'a', textChanged: true }) }), (e) => e.code === 'unconfirmed');
   assert.ok(!calls.some((c) => c[0] === 'submit'));
+});
+
+test('a files-only change still sends the unchanged typed answer so Moodle never sees a missing editor', async () => {
+  const { api, calls } = fakeApi();
+  await performSubmission({
+    api, write, assignment: assignment(),
+    input: input({ files: { changed: true, keep: [], added: [fileObj('x.txt')] }, existing: { plain: 'mi respuesta', simple: true } }),
+  });
+  const save = calls.find((c) => c[0] === 'save');
+  assert.deepEqual(save[2].onlinetext_editor, { text: '<p>mi respuesta</p>', format: 1, itemid: 0 });
+  assert.ok('files_filemanager' in save[2]);
+});
+
+test('no typed-answer companion when the assignment has no online text; text-only still never sends files', async () => {
+  const a = fakeApi();
+  await performSubmission({ api: a.api, write, assignment: assignment({ plugins: { onlinetext: false, file: true } }), input: input({ files: { changed: true, keep: [], added: [fileObj('x.txt')] } }) });
+  assert.deepEqual(Object.keys(a.calls.find((c) => c[0] === 'save')[2]), ['files_filemanager']);
+  const b = fakeApi();
+  await performSubmission({ api: b.api, write, assignment: assignment(), input: input({ text: 'hola', textChanged: true }) });
+  assert.deepEqual(Object.keys(b.calls.find((c) => c[0] === 'save')[2]), ['onlinetext_editor']);
+});
+
+test('changing files while the existing answer has website formatting is refused before anything is written', async () => {
+  const { api, calls } = fakeApi();
+  await assert.rejects(
+    () => performSubmission({ api, write, assignment: assignment(), input: input({ files: { changed: true, keep: [], added: [fileObj('x.txt')] }, existing: { plain: 'hola mundo', simple: false } }) }),
+    (e) => e.code === 'formattedblocksfiles',
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('an unconfirmed outcome: badresponse after the save/submit was sent; pre-write network errors stay plain', async () => {
+  const a = fakeApi({ submitForGrading: async () => { throw new MoodleError('badresponse'); } });
+  await assert.rejects(() => performSubmission({ api: a.api, write, assignment: assignment(), input: input({ submit: true, text: 'a', textChanged: true }) }), (e) => e.code === 'unconfirmed');
+  assert.ok(a.calls.some((c) => c[0] === 'save')); // the save did go out
+  const b = fakeApi({ uploadDraftFile: async () => { throw new MoodleError('network'); } });
+  await assert.rejects(() => performSubmission({ api: b.api, write, assignment: assignment(), input: input({ files: { changed: true, keep: [], added: [fileObj('x.txt')] } }) }), (e) => e.code === 'network');
+  const c = fakeApi({ saveSubmission: async () => { throw new MoodleError('submissionclosed', 'Closed'); } });
+  await assert.rejects(() => performSubmission({ api: c.api, write, assignment: assignment(), input: input({ text: 'a', textChanged: true }) }), (e) => e.code === 'submissionclosed');
+});
+
+test('removing all files aborts when no draft area can be obtained (it would silently keep the files)', async () => {
+  const { api, calls } = fakeApi({ getUnusedDraftItemId: async () => { throw new MoodleError('accessexception'); } });
+  await assert.rejects(
+    () => performSubmission({ api, write, assignment: assignment(), input: input({ files: { changed: true, keep: [], added: [] } }) }),
+    (e) => e.code === 'nodraft',
+  );
+  assert.ok(!calls.some((c) => c[0] === 'save'));
 });

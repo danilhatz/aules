@@ -408,3 +408,112 @@ test('Test upload: success sets the flag and reports ok; failure records the err
   assert.equal(bad.root.querySelector('input[type=file]'), null);
   assert.match(bad.root.querySelector('.pane-detail').textContent, /not available for your account/);
 });
+
+const { draftBase, parseStatus: parseStatusForTest } = await import('../src/assign.js');
+const BASE = draftBase(parseStatusForTest(sampleStatusResponse));
+const setFilesOn = (input, files) => { Object.defineProperty(input, 'files', { value: files, configurable: true }); input.dispatchEvent(new window.Event('change')); };
+
+test('a local draft typed against the same server text is restored automatically', async () => {
+  const { app, root, win, drafts } = setup({}, true);
+  drafts.set(42, 'mi borrador', BASE);
+  await app.start();
+  await goAssign(app, win);
+  assert.equal(root.querySelector('.pane-detail textarea').value, 'mi borrador');
+  assert.equal(root.querySelector('.stale-draft'), null);
+});
+
+test('a local draft typed against different server text is offered, not applied', async () => {
+  const { app, root, win, drafts } = setup({}, true);
+  drafts.set(42, 'texto viejo', 'otra base');
+  await app.start();
+  await goAssign(app, win);
+  assert.equal(root.querySelector('.pane-detail textarea').value, 'Mi ciudad es bonita.');
+  assert.ok(root.querySelector('.stale-draft'));
+  clickBtn(root, 'Discard');
+  assert.equal(drafts.get(42), null);
+});
+
+test('typing stores the draft together with the server text it is based on', async () => {
+  const { app, root, win, drafts } = setup({}, true);
+  await app.start();
+  await goAssign(app, win);
+  const ta = root.querySelector('textarea');
+  ta.value = 'nuevo';
+  ta.dispatchEvent(new window.Event('input'));
+  assert.equal(drafts.get(42).base, BASE);
+});
+
+test('file upload stays hidden until the Test upload has succeeded', async () => {
+  const { app, root, win, cache } = setup({}, true);
+  await app.start();
+  await goAssign(app, win);
+  assert.equal(root.querySelector('input[type=file]'), null);
+  assert.match(root.querySelector('.pane-detail').textContent, /Test upload/);
+  cache.set('uploadOk', true);
+  await goAssign(app, win);
+  assert.ok(root.querySelector('input[type=file]'));
+});
+
+test('a result that arrives after sign-out is dropped: no flash for the next session and no further write steps', async () => {
+  let release; const gate = new Promise((r) => { release = r; });
+  const calls = [];
+  const { app, root, win, cache } = setup({
+    uploadDraftFile: async (t, f) => { calls.push('upload'); await gate; return { itemid: 900, filename: f.name }; },
+    saveSubmission: async () => { calls.push('save'); return []; },
+  }, true);
+  cache.set('uploadOk', true);
+  await app.start();
+  await goAssign(app, win);
+  setFilesOn(root.querySelector('input[type=file]'), [new window.File(['abc'], 'a.pdf')]);
+  clickBtn(root, 'Save draft');
+  await tick();
+  app.logout();
+  release();
+  await settle();
+  assert.deepEqual(calls, ['upload']); // the save step was refused after sign-out
+  await app.login('u', 'p');
+  await goAssign(app, win);
+  assert.equal(root.querySelector('.flash'), null);
+});
+
+test('the saved/unconfirmed flash is only shown for the assignment that was saved, not elsewhere', async () => {
+  let release; const gate = new Promise((r) => { release = r; });
+  const { app, root, win } = setup({ saveSubmission: async () => { await gate; return []; } }, true);
+  await app.start();
+  await goAssign(app, win);
+  root.querySelector('textarea').value = 'cambio';
+  clickBtn(root, 'Save draft');
+  await tick();
+  win.location.hash = '#/course/11';
+  await app.showRoute();
+  await settle();
+  release();
+  await settle();
+  assert.equal(root.querySelector('.flash'), null); // not painted on the course page
+  await goAssign(app, win);
+  assert.equal(root.querySelector('.flash'), null); // and not carried to a later visit
+});
+
+test('Test upload: an expired session does not mark uploads as unavailable, and a result after sign-out is not stored', async () => {
+  const a = setup({ uploadDraftFile: async () => { throw new MoodleError('invalidtoken'); } }, true);
+  await a.app.start();
+  a.win.location.hash = '#/diagnostics';
+  await a.app.showRoute();
+  await settle();
+  a.root.querySelector('button.upload-test').click();
+  await settle();
+  assert.equal(a.cache.get('uploadOk'), null);
+
+  let release; const gate = new Promise((r) => { release = r; });
+  const b = setup({ uploadDraftFile: async (t, f) => { await gate; return { itemid: 1, filename: f.name }; } }, true);
+  await b.app.start();
+  b.win.location.hash = '#/diagnostics';
+  await b.app.showRoute();
+  await settle();
+  b.root.querySelector('button.upload-test').click();
+  await tick();
+  b.app.logout();
+  release();
+  await settle();
+  assert.equal(b.cache.get('uploadOk'), null);
+});

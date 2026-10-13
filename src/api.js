@@ -109,6 +109,8 @@ export async function uploadDraftFile(token, file, { itemid = 0, fetchImpl } = {
   form.append('file_1', file.blob, file.name);
   const data = await send(`${SITE_URL}/webservice/upload.php`, form, fetchImpl);
   const first = Array.isArray(data) ? data[0] : null;
+  // upload.php reports per-file problems (duplicate name, too big) as a 200 with an error item.
+  if (first && (first.error || first.errortype)) throw new MoodleError(first.errortype || 'uploaderror', first.error || first.errortype);
   if (!first || first.itemid == null) throw new MoodleError('badresponse');
   return { itemid: first.itemid, filename: first.filename };
 }

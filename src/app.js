@@ -7,7 +7,7 @@ import { renderAssign } from './ui/assign.js';
 import { buildCourse } from './content.js';
 import { loadCourseList } from './courses.js';
 import { runDiagnostics, buildReport } from './diagnostics.js';
-import { parseAssignment, parseStatus, editability } from './assign.js';
+import { parseAssignment, parseStatus, editability, draftBase } from './assign.js';
 import { performSubmission } from './submit.js';
 import { createFolderState } from './folders.js';
 import { createDrafts } from './drafts.js';
@@ -33,7 +33,8 @@ export function createApp({
   let shell = null;
   let listPane = null;
   let detailPane = null;
-  let pendingFlash = '';
+  let pendingFlash = null; // { cmid, kind }: shown once, only on the assignment that was just saved
+  let renderId = 0; // newest showRoute wins; older in-flight loads must not paint
   let siteMaxUpload = null;
 
   const view = () => {
@@ -67,7 +68,7 @@ export function createApp({
     courses = [];
     lastList = null;
     siteMaxUpload = null;
-    pendingFlash = '';
+    pendingFlash = null;
     showLogin(message);
     if (win.location.hash) win.location.hash = '';
   }
@@ -182,30 +183,39 @@ export function createApp({
   }
 
   async function uploadTest() {
+    const epoch = auth.epoch();
     try {
       const r = await callWrite((s) => api.uploadDraftFile(s.token, { name: 'aules-app-test.txt', blob: new Blob(['x'], { type: 'text/plain' }) }, { itemid: 0 }));
       try {
         await callWrite((s) => api.deleteDraftFiles(s.token, r.itemid, [{ filepath: '/', filename: r.filename || 'aules-app-test.txt' }]));
       } catch { /* cleanup is best effort; Moodle clears stale drafts itself */ }
-      cache.set('uploadOk', true);
+      if (auth.epoch() === epoch) cache.set('uploadOk', true);
       return 'Upload test: ok';
     } catch (err) {
-      if (err && err.code !== 'network' && err.code !== 'retry') cache.set('uploadOk', false);
+      const definite = err && !['network', 'retry', 'invalidtoken'].includes(err.code);
+      if (definite && auth.epoch() === epoch) cache.set('uploadOk', false);
       return `Upload test: ${safeCode(err && err.code)}`;
     }
   }
 
   async function send(assignment, input, epoch) {
-    const result = await performSubmission({ api, write: callWrite, assignment, input });
-    if (auth.epoch() === epoch) drafts.remove(assignment.id);
+    // After sign-out no further step of an in-flight save may run (it would use the next session's token).
+    const write = (fn) => {
+      if (auth.epoch() !== epoch) throw new MoodleError('signedout');
+      return callWrite(fn);
+    };
+    const result = await performSubmission({ api, write, assignment, input });
+    if (auth.epoch() !== epoch) throw new MoodleError('signedout');
+    drafts.remove(assignment.id);
     return result;
   }
 
-  async function showAssign(courseId, cmid, session) {
+  async function showAssign(courseId, cmid, session, rid) {
     const epoch = auth.epoch();
-    const flash = pendingFlash;
-    pendingFlash = '';
-    const here = () => { const v = view(); return v.type === 'assign' && v.cmid === cmid; };
+    const flash = pendingFlash && pendingFlash.cmid === cmid ? pendingFlash.kind : '';
+    pendingFlash = null;
+    const onThis = () => { const v = view(); return v.type === 'assign' && v.cmid === cmid; };
+    const here = () => onThis() && rid === renderId;
     clear(detailPane).append(h('p', { class: 'status' }, S.loading));
     const back = () => h('a', { class: 'back', href: `#/course/${courseId}` }, '‹ ', S.backToCourse);
     let rawList;
@@ -248,23 +258,37 @@ export function createApp({
     if (auth.epoch() !== epoch || !here()) return;
     const live = auth.getSession() || session;
     const up = cache.get('uploadOk');
+    const base = status ? draftBase(status) : '';
     const draft = drafts.get(assignment.id);
+    let draftText = null;
+    let staleDraft = null;
+    if (draft && status) {
+      // Only restore automatically when it was typed against the same plain server text; otherwise offer it.
+      if (status.text.simple && draft.base === base) draftText = draft.text;
+      else staleDraft = { text: draft.text, savedAt: draft.savedAt };
+    }
     clear(detailPane).append(renderAssign({
       courseId,
       assignment,
       status,
       editability: status ? editability(assignment, status, nowFn()) : { editable: false, reason: 'notallowed' },
-      uploadAvailable: !(up && up.data === false),
+      uploadState: up ? (up.data === true ? 'ok' : 'failed') : 'unknown',
       maxBytes,
-      draftText: draft ? draft.text : null,
+      draftText,
+      staleDraft,
+      onDiscardDraft: () => drafts.remove(assignment.id),
       token: live.token,
       offline: isOffline,
       now: nowFn(),
       locale,
       flash,
       actions: { send: (input) => send(assignment, input, epoch) },
-      onDone: (kind) => { pendingFlash = kind; showRoute(); },
-      onTextInput: (t) => drafts.set(assignment.id, t),
+      onDone: (kind) => {
+        if (auth.epoch() !== epoch || !onThis()) return; // signed out or navigated away: drop it
+        pendingFlash = { cmid, kind };
+        showRoute();
+      },
+      onTextInput: (t) => drafts.set(assignment.id, t, base),
     }));
   }
 
@@ -272,6 +296,7 @@ export function createApp({
     const session = auth.getSession();
     if (!session || !shell) return;
     const v = view();
+    const rid = (renderId += 1);
     const id = v.type === 'course' ? v.id : null;
     shell.classList.toggle('has-detail', v.type !== 'list');
     renderList();
@@ -290,7 +315,7 @@ export function createApp({
       return;
     }
     if (v.type === 'assign') {
-      await showAssign(v.courseId, v.cmid, session);
+      await showAssign(v.courseId, v.cmid, session, rid);
       return;
     }
     if (id === null) {
@@ -316,7 +341,7 @@ export function createApp({
       sections = saved.data;
       fromCache = true;
     }
-    if (route() !== id) return; // user navigated away while loading
+    if (route() !== id || rid !== renderId) return; // user navigated away while loading
     // Optional: due dates for assignments (never blocks or fails the course page).
     let dues = {};
     try {
@@ -327,7 +352,7 @@ export function createApp({
       const saved = cache.get(`assigns:${id}`);
       if (saved) dues = duesOf(saved.data);
     }
-    if (auth.epoch() !== epoch || route() !== id) return;
+    if (auth.epoch() !== epoch || route() !== id || rid !== renderId) return;
     const info = courses.find((c) => c.id === id);
     const live = auth.getSession() || session; // token may have been renewed during the call
     clear(detailPane).append(renderCourse({

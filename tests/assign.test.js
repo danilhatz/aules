@@ -142,3 +142,14 @@ test('formatDue gives relative and absolute text and flags overdue', () => {
   assert.equal(past.relative, '3 hours ago'); assert.equal(past.overdue, true);
   assert.equal(formatDue(NOW + 5 * 60, NOW, 'en').relative, 'in 5 minutes');
 });
+
+import { draftBase } from '../src/assign.js';
+
+test('parseStatus exposes the attempt number and draftBase changes when the server text or attempt changes', () => {
+  const mk = (attempt, text) => parseStatus({ lastattempt: { submission: { status: 'draft', attemptnumber: attempt, plugins: [{ type: 'onlinetext', editorfields: [{ text }] }] }, canedit: true } });
+  assert.equal(mk(2, '<p>x</p>').attempt, 2);
+  assert.equal(parseStatus({}).attempt, 0);
+  assert.equal(draftBase(mk(0, '<p>x</p>')), draftBase(mk(0, '<p>x</p>')));
+  assert.notEqual(draftBase(mk(0, '<p>x</p>')), draftBase(mk(0, '<p>y</p>')));
+  assert.notEqual(draftBase(mk(0, '<p>x</p>')), draftBase(mk(1, '<p>x</p>')));
+});

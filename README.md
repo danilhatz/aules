@@ -18,7 +18,7 @@ Open an Exercise from a course to read the instructions, see the due date and st
 - Nothing is sent without a tap, requests are never repeated automatically, and if the connection drops mid-send the app tells you it could not confirm and re-checks the status instead of guessing.
 - Only the parts you changed are sent, so editing text never touches your files.
 - Your typed text is kept on the phone while you write (and removed on sign out), so leaving the screen does not lose it.
-- File and photo upload depends on your school's settings. Run **Diagnostics -> Test upload** once; it sends one tiny dummy file to your own draft area (nothing is submitted) and records whether uploads work.
+- File and photo upload depends on your school's settings. Run **Diagnostics -> Test upload** once; it sends one tiny dummy file to your own draft area (nothing is submitted) and records whether uploads work. The file picker only appears after that test has succeeded.
 
 Still to come: quizzes and forums (they show "Coming soon" in courses).
 

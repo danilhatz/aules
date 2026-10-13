@@ -174,3 +174,12 @@ test('uploadDraftFile maps error JSON, empty results and network failures', asyn
   await assert.rejects(() => uploadDraftFile('t', file, { fetchImpl: ok([]) }), (e) => e.code === 'badresponse');
   await assert.rejects(() => uploadDraftFile('t', file, { fetchImpl: async () => { throw new TypeError('x'); } }), (e) => e.code === 'network');
 });
+
+test('uploadDraftFile turns upload.php per-file errors (duplicate name, too big) into MoodleErrors with its message', async () => {
+  const file = { name: 'image.jpg', blob: new Blob(['x']) };
+  await assert.rejects(
+    () => uploadDraftFile('t', file, { fetchImpl: ok([{ error: 'A file with that name already exists', errortype: 'filenameexist' }]) }),
+    (e) => e.code === 'filenameexist' && e.message === 'A file with that name already exists',
+  );
+  await assert.rejects(() => uploadDraftFile('t', file, { fetchImpl: ok([{ error: 'Too big' }]) }), (e) => e.code === 'uploaderror' && e.message === 'Too big');
+});

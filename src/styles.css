@@ -119,3 +119,7 @@ details.folder[open] > summary::after, .unit[open] > summary::after { transform:
 .files .remove { min-height: 32px; }
 .grade { font-weight: 700; }
 .diagnostics .upload-test { width: calc(100% - 32px); margin: 10px 16px 0; }
+
+.answer-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.stale-draft { margin: 0 0 12px; padding: 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--surface); }
+.stale-draft .btn { width: 100%; margin: 6px 0 0; }

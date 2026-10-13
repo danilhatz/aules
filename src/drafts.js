@@ -12,12 +12,12 @@ export function createDrafts(storage) {
         return v && typeof v.text === 'string' ? v : null;
       } catch { return null; }
     },
-    set(id, text) {
+    set(id, text, base = '') {
       try {
         const key = String(id);
         const idx = readIndex();
         if (!idx.includes(key)) storage.setItem(INDEX, JSON.stringify([...idx, key])); // index first: no orphans
-        storage.setItem(P + key, JSON.stringify({ text, savedAt: Date.now() }));
+        storage.setItem(P + key, JSON.stringify({ text, base, savedAt: Date.now() }));
       } catch { /* best effort */ }
     },
     remove(id) {

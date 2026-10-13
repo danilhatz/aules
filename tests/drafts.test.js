@@ -42,3 +42,11 @@ test('corrupt entries are a miss; storage failures never throw; a failed data wr
   createDrafts(s2).clear();
   assert.equal(s2.getItem('aules.draft.3'), null);
 });
+
+test('a draft remembers the server text it was typed against', () => {
+  const d = createDrafts(createMemoryStorage());
+  d.set(7, 'mi borrador', '1|<p>base</p>');
+  assert.equal(d.get(7).base, '1|<p>base</p>');
+  d.set(8, 'sin base');
+  assert.equal(d.get(8).base, '');
+});
