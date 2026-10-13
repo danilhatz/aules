@@ -33,5 +33,8 @@ export const STRINGS = {
     notoken: 'Aules did not issue an access token for this account.',
     servicenotavailable: 'The mobile service is not enabled for this account.',
     unknown: 'Something went wrong.',
+    retry: 'Your session was renewed. Please tap again.',
+    keepfailed: 'Could not re-attach one of your existing files. Nothing was saved.',
+    nochanges: 'Nothing to send yet.',
   },
 };
