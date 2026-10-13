@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupDom } from './helpers/dom.js';
-import { sampleCourses, sampleSections } from './fixtures.js';
+import { sampleCourses, sampleSections, sampleAssignmentsResponse, sampleStatusResponse } from './fixtures.js';
 import { MoodleError } from '../src/api.js';
 import { createMemoryStorage } from '../src/storage.js';
 
@@ -9,6 +9,7 @@ const { createApp } = await import('../src/app.js');
 const { createAuth } = await import('../src/auth.js');
 const { createCache } = await import('../src/store.js');
 const { createVault, createMemoryKeyStore } = await import('../src/vault.js');
+const { createDrafts } = await import('../src/drafts.js');
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -20,6 +21,13 @@ function setup(apiOverrides = {}, preloadSession = false) {
     getSiteInfo: async () => ({ userid: 7, fullname: 'Ana' }),
     getCourses: async () => sampleCourses,
     getCourseContents: async () => sampleSections,
+    getAssignments: async () => sampleAssignmentsResponse,
+    getSubmissionStatus: async () => sampleStatusResponse,
+    getUnusedDraftItemId: async () => ({ itemid: 555 }),
+    saveSubmission: async () => [],
+    submitForGrading: async () => [],
+    uploadDraftFile: async (t, f) => ({ itemid: 900, filename: f.name }),
+    deleteDraftFiles: async () => [],
     ...apiOverrides,
   };
   const vault = createVault({ storage, keyStore: createMemoryKeyStore() });
@@ -27,8 +35,9 @@ function setup(apiOverrides = {}, preloadSession = false) {
   const cache = createCache(storage);
   if (preloadSession) storage.setItem('aules.session', JSON.stringify({ token: 'tok', userid: 7, fullname: 'Ana' }));
   const root = document.getElementById('app');
-  const app = createApp({ root, api, auth, cache, win: dom.window });
-  return { app, root, storage, auth, cache, vault, api, win: dom.window };
+  const drafts = createDrafts(storage);
+  const app = createApp({ root, api, auth, cache, win: dom.window, drafts, nowFn: () => 1785000000, locale: 'en' });
+  return { app, root, storage, auth, cache, vault, drafts, api, win: dom.window };
 }
 
 test('no session -> login screen', async () => {
@@ -255,4 +264,147 @@ test('invalid token during diagnostics with nothing saved returns to login', asy
   await app.showRoute();
   await tick(); await tick(); await tick();
   assert.ok(root.querySelector('form.login-card'));
+});
+
+const goAssign = async (app, win) => { win.location.hash = '#/course/11/assign/9'; await app.showRoute(); await tick(); await tick(); };
+const clickBtn = (root, text) => [...root.querySelectorAll('button')].find((b) => b.textContent === text).click();
+const settle = async () => { for (let i = 0; i < 5; i += 1) await tick(); };
+
+test('the course page lists the assignment with its due date and links to it', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  win.location.hash = '#/course/11';
+  await app.showRoute();
+  await tick();
+  const link = root.querySelector('a.assign-link');
+  assert.ok(link);
+  assert.equal(link.getAttribute('href'), '#/course/11/assign/9');
+  assert.match(link.closest('li').querySelector('small.due').textContent, /in 2 days/);
+});
+
+test('the assignment route renders the screen with the existing answer', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  await goAssign(app, win);
+  assert.ok(root.querySelector('.shell.has-detail'));
+  assert.equal(root.querySelector('.pane-detail h2').textContent, 'Tarea 1');
+  assert.equal(root.querySelector('.pane-detail textarea').value, 'Mi ciudad es bonita.');
+  assert.equal(root.querySelector('.badge').textContent, 'Draft');
+});
+
+test('Save draft sends only the changed text, clears the local draft and shows a flash', async () => {
+  const saves = [];
+  const { app, root, win, drafts } = setup({ saveSubmission: async (t, id, pd) => { saves.push([id, pd]); return []; } }, true);
+  await app.start();
+  await goAssign(app, win);
+  const ta = root.querySelector('textarea');
+  ta.value = 'Mi ciudad es muy bonita.';
+  ta.dispatchEvent(new window.Event('input'));
+  assert.equal(drafts.get(42).text, 'Mi ciudad es muy bonita.');
+  clickBtn(root, 'Save draft');
+  await settle();
+  assert.equal(saves.length, 1);
+  assert.deepEqual(Object.keys(saves[0][1]), ['onlinetext_editor']);
+  assert.equal(saves[0][1].onlinetext_editor.text, '<p>Mi ciudad es muy bonita.</p>');
+  assert.equal(drafts.get(42), null);
+  assert.match(root.querySelector('.flash').textContent, /Draft saved/);
+});
+
+test('Submit asks for confirmation, then saves and submits', async () => {
+  const seq = [];
+  const { app, root, win } = setup({
+    saveSubmission: async () => { seq.push('save'); return []; },
+    submitForGrading: async () => { seq.push('submit'); return []; },
+  }, true);
+  await app.start();
+  await goAssign(app, win);
+  root.querySelector('textarea').value = 'Texto final';
+  clickBtn(root, 'Submit for grading');
+  assert.deepEqual(seq, []);
+  clickBtn(root, 'Yes, submit');
+  await settle();
+  assert.deepEqual(seq, ['save', 'submit']);
+  assert.match(root.querySelector('.flash').textContent, /Submitted/);
+});
+
+test('a network failure during a write refreshes the screen and says it could not confirm', async () => {
+  const { app, root, win } = setup({ saveSubmission: async () => { throw new MoodleError('network'); } }, true);
+  await app.start();
+  await goAssign(app, win);
+  root.querySelector('textarea').value = 'x y z';
+  clickBtn(root, 'Save draft');
+  await settle();
+  assert.match(root.querySelector('.flash').textContent, /Could not confirm/);
+});
+
+test('an expired token during a write renews the session but does not replay the write', async () => {
+  let saves = 0;
+  const { app, root, win, vault } = setup({
+    saveSubmission: async () => { saves += 1; throw new MoodleError('invalidtoken'); },
+    requestToken: async () => 'fresh',
+  }, true);
+  await vault.save('u', 'pw');
+  await app.start();
+  await goAssign(app, win);
+  root.querySelector('textarea').value = 'algo';
+  clickBtn(root, 'Save draft');
+  await settle();
+  assert.equal(saves, 1); // never replayed
+  assert.match(root.querySelector('.form-msg').textContent, /tap again/);
+});
+
+test('offline with a cached assignment shows a read-only view', async () => {
+  const { app, root, win, cache } = setup({ getAssignments: async () => { throw new MoodleError('network'); } }, true);
+  cache.set('assigns:11', sampleAssignmentsResponse.courses[0].assignments);
+  await app.start();
+  await goAssign(app, win);
+  assert.equal(root.querySelector('.pane-detail form'), null);
+  assert.match(root.querySelector('.pane-detail').textContent, /offline/i);
+});
+
+test('a task that is not in the course shows a not-found message', async () => {
+  const { app, root, win } = setup({}, true);
+  await app.start();
+  win.location.hash = '#/course/11/assign/777';
+  await app.showRoute();
+  await settle();
+  assert.match(root.querySelector('.pane-detail').textContent, /not found/);
+});
+
+test('sign-out clears local drafts and the upload flag', async () => {
+  const { app, drafts, cache } = setup({}, true);
+  await app.start();
+  drafts.set(42, 'borrador');
+  cache.set('uploadOk', false);
+  app.logout();
+  await tick();
+  assert.equal(drafts.get(42), null);
+  assert.equal(cache.get('uploadOk'), null);
+});
+
+test('Test upload: success sets the flag and reports ok; failure records the error code and hides file upload afterwards', async () => {
+  const deleted = [];
+  const ok = setup({ deleteDraftFiles: async (t, id, files) => { deleted.push([id, files]); return []; } }, true);
+  await ok.app.start();
+  ok.win.location.hash = '#/diagnostics';
+  await ok.app.showRoute();
+  await settle();
+  ok.root.querySelector('button.upload-test').click();
+  await settle();
+  assert.match(ok.root.querySelector('pre.report').textContent, /Upload test: ok$/);
+  assert.equal(ok.cache.get('uploadOk').data, true);
+  assert.equal(deleted.length, 1);
+
+  const bad = setup({ uploadDraftFile: async () => { throw new MoodleError('nopermissions'); } }, true);
+  await bad.app.start();
+  bad.win.location.hash = '#/diagnostics';
+  await bad.app.showRoute();
+  await settle();
+  bad.root.querySelector('button.upload-test').click();
+  await settle();
+  assert.match(bad.root.querySelector('pre.report').textContent, /Upload test: nopermissions$/);
+  assert.equal(bad.cache.get('uploadOk').data, false);
+  await goAssign(bad.app, bad.win);
+  assert.equal(bad.root.querySelector('input[type=file]'), null);
+  assert.match(bad.root.querySelector('.pane-detail').textContent, /not available for your account/);
 });

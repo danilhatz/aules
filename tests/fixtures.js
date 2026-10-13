@@ -36,3 +36,16 @@ export const sampleTimelineCourses = [
   { id: 14, fullname: 'Conversación B1', shortname: 'ES-CON-B1', coursecategory: 'Español B1', progress: 75 },
   { id: 15, fullname: 'Taller de escritura', shortname: 'ES-TAL', coursecategory: '', progress: null },
 ];
+
+const cfg = (plugin, v) => ({ plugin, subtype: 'assignsubmission', name: 'enabled', value: v });
+
+export const sampleAssignmentsResponse = {
+  courses: [{ id: 11, assignments: [
+    { id: 42, cmid: 9, name: 'Tarea 1', intro: '<p>Escribe un párrafo sobre tu ciudad.</p>', duedate: 1785172800, cutoffdate: 0, allowsubmissionsfromdate: 0,
+      submissiondrafts: 1, requiresubmissionstatement: 0, teamsubmission: 0, nosubmissions: 0, configs: [cfg('onlinetext', '1'), cfg('file', '1')], introattachments: [] },
+  ] }],
+};
+
+export const sampleStatusResponse = {
+  lastattempt: { submission: { status: 'draft', plugins: [{ type: 'onlinetext', editorfields: [{ text: '<p>Mi ciudad es bonita.</p>' }] }, { type: 'file', fileareas: [{ area: 'submission_files', files: [] }] }] }, canedit: true, cansubmit: true },
+};
