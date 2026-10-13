@@ -35,6 +35,11 @@ function renderModule(m, opts, ctx) {
       due && due.has ? h('small', { class: due.overdue ? 'due overdue' : 'due' }, `${due.relative} · ${due.absolute}`) : null,
       m.description ? html('html small', m.description, opts) : null);
   }
+  if (m.kind === 'forum') {
+    return h('li', { class: 'mod forum' },
+      h('div', { class: 'mod-head' }, chip(m), h('a', { class: 'forum-link', href: `#/course/${ctx.courseId}/forum/${m.id}` }, m.name)),
+      m.description ? html('html small', m.description, opts) : null);
+  }
   const linkOnly = (m.kind === 'url' || m.kind === 'page') && m.links.length > 0;
   return h('li', { class: `mod ${m.kind}` },
     h('div', { class: 'mod-head' }, chip(m), linkOnly ? null : h('span', { class: 'mod-name' }, m.name)),

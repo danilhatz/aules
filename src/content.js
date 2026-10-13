@@ -15,7 +15,7 @@ export function withToken(url, token) {
   return u.toString();
 }
 
-const SOON = new Set(['forum']);
+const SOON = new Set();
 const PLAIN_PREFIX =`${SITE.pathname}/pluginfile.php/`;
 
 // Moodle hands out plain /pluginfile.php/ image URLs in some responses; the token only works on the webservice path.
@@ -51,6 +51,8 @@ function buildModule(m, token) {
       return { ...base, kind: 'assign' };
     case 'quiz':
       return { ...base, kind: 'quiz' };
+    case 'forum':
+      return { ...base, kind: 'forum' };
     case 'url': {
       const u = (m.contents || []).find((c) => c.type === 'url');
       const links = u && isSafeHttpUrl(u.fileurl) ? [{ label: base.name, href: u.fileurl, external: true }] : [];

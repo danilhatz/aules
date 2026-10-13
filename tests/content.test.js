@@ -41,8 +41,8 @@ test('module kinds and links', () => {
   assert.equal(folder.links.length, 2);
   assert.equal(page.kind, 'page');
   assert.deepEqual(page.links, [{ label: 'Reading', href: `${F}/7/mod_page/content/index.html?token=T` }]);
-  assert.equal(forum.kind, 'other');
-  assert.equal(forum.unsupported, true);
+  assert.equal(forum.kind, 'forum');
+  assert.equal(forum.unsupported, undefined);
   assert.deepEqual(forum.links, []);
 });
 
@@ -81,11 +81,11 @@ test('toWebserviceUrl rewrites only this instance\'s plain pluginfile URLs', () 
   assert.equal(toWebserviceUrl('not a url'), 'not a url');
 });
 
-test('modules carry modname; only forum is marked soon; other unsupported types are not', () => {
+test('modules carry modname; nothing is marked "coming soon" any more and unsupported types say so', () => {
   const [, unit] = buildCourse(sampleSections, 'T');
   const byName = Object.fromEntries(unit.modules.map((m) => [m.name, m]));
   assert.equal(byName.Questions.modname, 'forum');
-  assert.equal(byName.Questions.soon, true);
+  assert.equal(byName.Questions.soon, undefined);
   assert.equal(byName.Glossary.unsupported, true);
   assert.equal(byName.Glossary.soon, undefined);
   assert.equal(byName.Reading.modname, 'page');

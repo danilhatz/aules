@@ -151,7 +151,11 @@ test('course view: sections, safe label html, token on file links, first section
   assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
   assert.equal(link.getAttribute('target'), '_blank');
   assert.ok(el.textContent.includes('Not available in this app yet')); // glossary (unknown type)
-  assert.ok([...el.querySelectorAll('.soon')].some((n) => n.textContent === 'Coming soon')); // forum
+  const forumLink = el.querySelector('a.forum-link');
+  assert.ok(forumLink); // forum
+  assert.equal(forumLink.getAttribute('href'), '#/course/11/forum/7');
+  assert.equal(forumLink.textContent, 'Questions');
+  assert.ok(![...el.querySelectorAll('.soon')].some((n) => n.textContent === 'Coming soon'));
   assert.equal(el.querySelector('a.back').getAttribute('href'), '#/');
 });
 
