@@ -1113,6 +1113,6 @@ test('without an explicit locale the app formats dates in the active app languag
   const { LANG } = await import('../src/strings.js');
   assert.equal(LANG, 'en');
   const src = await (await import('node:fs/promises')).readFile(new URL('../src/app.js', import.meta.url), 'utf8');
-  assert.match(src, /locale = LANG\b/);
+  assert.match(src, /locale = LOCALE\b/);
   assert.doesNotMatch(src, /navigator\.language/);
 });
