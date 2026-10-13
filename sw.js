@@ -1,4 +1,4 @@
-const VERSION = "v6";
+const VERSION = "v7";
 const CACHE = `aules-shell-${VERSION}`;
 const SHELL = [
   "./",
@@ -19,6 +19,7 @@ const SHELL = [
   "./src/drafts.js",
   "./src/errors.js",
   "./src/folders.js",
+  "./src/i18n.js",
   "./src/qhtml.js",
   "./src/quiz.js",
   "./src/main.js",

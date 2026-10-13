@@ -1,0 +1,42 @@
+export const LANGUAGES = ['en', 'uk'];
+export const PREF_KEY = 'aules.lang';
+
+export function resolveLanguage(pref, navigatorLanguages) {
+  if (LANGUAGES.includes(pref)) return pref;
+  if (Array.isArray(navigatorLanguages)) {
+    for (const tag of navigatorLanguages) {
+      if (typeof tag !== 'string') continue;
+      const primary = tag.toLowerCase().split('-')[0];
+      if (LANGUAGES.includes(primary)) return primary;
+    }
+  }
+  return 'en';
+}
+
+export function readPreference(storage) {
+  try {
+    const v = storage && storage.getItem(PREF_KEY);
+    return LANGUAGES.includes(v) ? v : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function savePreference(storage, value) {
+  if (!storage || (value !== 'auto' && !LANGUAGES.includes(value))) return false;
+  try {
+    if (value === 'auto') storage.removeItem(PREF_KEY);
+    else storage.setItem(PREF_KEY, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function deviceStorage() {
+  try {
+    return globalThis.localStorage || null;
+  } catch {
+    return null;
+  }
+}
