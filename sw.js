@@ -1,4 +1,4 @@
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = `aules-shell-${VERSION}`;
 const SHELL = [
   "./",
@@ -36,7 +36,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -47,19 +47,15 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Same-origin GETs: serve the cached copy immediately and refresh it in the background.
-// Cross-origin requests (the aules API and files) are never touched, so tokens are never cached.
+// Same-origin GETs are served from the versioned cache with no network request at all, so the app files
+// never compete with the Aules calls for mobile bandwidth and one version is always served as a consistent
+// set. A new release changes VERSION: the install step below re-downloads everything (bypassing the HTTP
+// cache) and the old cache is deleted on activate. Cross-origin requests (Aules API and files) are never
+// touched, so tokens are never cached.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   event.respondWith(
-    caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: true });
-      const network = fetch(req).then((res) => {
-        if (res.ok) cache.put(req, res.clone());
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    }),
+    caches.open(CACHE).then(async (cache) => (await cache.match(req, { ignoreSearch: true })) || fetch(req)),
   );
 });
