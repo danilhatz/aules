@@ -4,6 +4,7 @@ import { createAuth } from './auth.js';
 import { createCache } from './store.js';
 import { getStorage } from './storage.js';
 import { createVault, createIdbKeyStore } from './vault.js';
+import { createFolderState } from './folders.js';
 
 const storage = getStorage();
 const vault = createVault({ storage, keyStore: createIdbKeyStore() });
@@ -12,6 +13,7 @@ const app = createApp({
   api,
   auth: createAuth({ storage, api, vault }),
   cache: createCache(storage),
+  folderState: createFolderState(storage),
 });
 app.start();
 

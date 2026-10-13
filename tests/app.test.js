@@ -204,3 +204,55 @@ test('sign out while a silent renewal is in flight stays signed out', async () =
   assert.equal(cache.get('courses'), null);
   assert.ok(root.querySelector('form.login-card'));
 });
+
+const timelineCourses = [
+  { id: 11, fullname: 'Gramática', shortname: 'G', coursecategory: 'Español A1', progress: 10 },
+  { id: 12, fullname: 'Cultura', shortname: 'C', coursecategory: 'Español B1', progress: null },
+];
+
+test('categories from the timeline render as folders', async () => {
+  const { app, root } = setup({ getCoursesByTimeline: async () => ({ courses: timelineCourses }) }, true);
+  await app.start();
+  assert.equal(root.querySelectorAll('details.folder').length, 2);
+  assert.equal(root.querySelectorAll('a.card').length, 2);
+});
+
+test('the header links to Diagnostics and the route shows the report without leaking the token', async () => {
+  const { app, root, win } = setup({
+    getCoursesByTimeline: async () => ({ courses: timelineCourses }),
+    getSiteInfo: async () => ({ release: '4.1', functions: [{ name: 'mod_assign_save_submission' }], usermaxuploadfilesize: 1000 }),
+    getCourseContents: async () => [{ id: 1, modules: [{ modname: 'assign', name: 'secret', contents: [{ fileurl: 'https://aules.edu.gva.es/fpa/webservice/pluginfile.php/1/x?token=tok' }] }] }],
+  }, true);
+  await app.start();
+  assert.ok(root.querySelector('.pane-list a.link[href="#/diagnostics"]'));
+  win.location.hash = '#/diagnostics';
+  await app.showRoute();
+  await tick(); await tick(); await tick();
+  assert.ok(root.querySelector('.shell.has-detail'));
+  const report = root.querySelector('pre.report').textContent;
+  assert.match(report, /Aules diagnostics/);
+  assert.match(report, /Category source: 1/);
+  assert.match(report, /mod_assign_save_submission: yes/);
+  assert.match(report, /assign x2/);
+  assert.ok(!/tok\b|secret|Gramática/.test(report));
+});
+
+test('course page gets the course progress from the list', async () => {
+  const { app, root, win } = setup({ getCoursesByTimeline: async () => ({ courses: timelineCourses }) }, true);
+  await app.start();
+  win.location.hash = '#/course/11';
+  await app.showRoute();
+  assert.equal(root.querySelector('progress.course-progress').value, 10);
+});
+
+test('invalid token during diagnostics with nothing saved returns to login', async () => {
+  const { app, root, win } = setup({
+    getCoursesByTimeline: async () => ({ courses: timelineCourses }),
+    getSiteInfo: async () => { throw new MoodleError('invalidtoken'); },
+  }, true);
+  await app.start();
+  win.location.hash = '#/diagnostics';
+  await app.showRoute();
+  await tick(); await tick(); await tick();
+  assert.ok(root.querySelector('form.login-card'));
+});

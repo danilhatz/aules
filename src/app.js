@@ -2,21 +2,33 @@ import { clear, h } from './ui/dom.js';
 import { renderLogin } from './ui/login.js';
 import { renderCourseList } from './ui/courses.js';
 import { renderCourse, renderBack } from './ui/course.js';
+import { renderDiagnostics } from './ui/diagnostics.js';
 import { buildCourse } from './content.js';
+import { loadCourseList } from './courses.js';
+import { runDiagnostics, buildReport } from './diagnostics.js';
+import { createFolderState } from './folders.js';
+import { createMemoryStorage } from './storage.js';
 import { describeError } from './errors.js';
 import { MoodleError } from './api.js';
 import { STRINGS as S } from './strings.js';
 
-export function createApp({ root, api, auth, cache, win = globalThis.window }) {
+export function createApp({ root, api, auth, cache, win = globalThis.window, folderState = createFolderState(createMemoryStorage()) }) {
   let courses = [];
+  let lastList = null; // last loaded { courses, source, raw }; reused by Diagnostics
   let offline = false;
   let shell = null;
   let listPane = null;
   let detailPane = null;
 
+  const view = () => {
+    const hash = win.location.hash;
+    if (hash === '#/diagnostics') return { type: 'diagnostics' };
+    const m = /^#\/course\/(\d+)$/.exec(hash);
+    return m ? { type: 'course', id: Number(m[1]) } : { type: 'list' };
+  };
   const route = () => {
-    const m = /^#\/course\/(\d+)$/.exec(win.location.hash);
-    return m ? Number(m[1]) : null;
+    const v = view();
+    return v.type === 'course' ? v.id : null;
   };
 
   function showLogin(message = '') {
@@ -33,6 +45,7 @@ export function createApp({ root, api, auth, cache, win = globalThis.window }) {
     auth.logout();
     cache.clear();
     courses = [];
+    lastList = null;
     showLogin(message);
     if (win.location.hash) win.location.hash = '';
   }
@@ -70,17 +83,19 @@ export function createApp({ root, api, auth, cache, win = globalThis.window }) {
     clear(listPane).append(
       h('header', { class: 'bar' },
         h('h1', {}, S.courses),
+        h('a', { class: 'link', href: '#/diagnostics' }, S.diagnostics),
         h('button', { class: 'link', type: 'button', onclick: () => logout() }, S.logout)),
       ...(offline ? [h('p', { class: 'banner' }, S.offline)] : []),
-      renderCourseList({ courses, token, selectedId: route() }));
+      renderCourseList({ courses, token, selectedId: route(), folderState }));
   }
 
   async function loadCourses() {
     const epoch = auth.epoch();
     try {
-      const fetched = await call((s) => api.getCourses(s.token, s.userid));
+      const res = await call((s) => loadCourseList({ api, token: s.token, userid: s.userid }));
       if (auth.epoch() !== epoch) return false; // signed out meanwhile: drop the result
-      courses = fetched;
+      courses = res.courses;
+      lastList = res;
       cache.set('courses', courses);
       offline = false;
     } catch (err) {
@@ -94,6 +109,7 @@ export function createApp({ root, api, auth, cache, win = globalThis.window }) {
         return false;
       }
       courses = saved.data;
+      lastList = null;
       offline = true;
     }
     return true;
@@ -113,9 +129,23 @@ export function createApp({ root, api, auth, cache, win = globalThis.window }) {
   async function showRoute() {
     const session = auth.getSession();
     if (!session || !shell) return;
-    const id = route();
-    shell.classList.toggle('has-detail', id !== null);
+    const v = view();
+    const id = v.type === 'course' ? v.id : null;
+    shell.classList.toggle('has-detail', v.type !== 'list');
     renderList();
+    if (v.type === 'diagnostics') {
+      clear(detailPane).append(renderDiagnostics({
+        run: async () => {
+          try {
+            return buildReport(await runDiagnostics({ api, call, list: lastList }));
+          } catch (err) {
+            if (handleFatal(err)) return '';
+            throw err;
+          }
+        },
+      }));
+      return;
+    }
     if (id === null) {
       clear(detailPane).append(h('p', { class: 'placeholder' }, S.pickCourse));
       return;
@@ -143,7 +173,12 @@ export function createApp({ root, api, auth, cache, win = globalThis.window }) {
     const info = courses.find((c) => c.id === id);
     const live = auth.getSession() || session; // token may have been renewed during the call
     clear(detailPane).append(renderCourse({
-      course: { id, fullname: info ? info.fullname : '', sections: buildCourse(sections, live.token) },
+      course: {
+        id,
+        fullname: info ? info.fullname : '',
+        progress: info ? info.progress : null,
+        sections: buildCourse(sections, live.token),
+      },
       token: live.token,
       offline: fromCache,
     }));
