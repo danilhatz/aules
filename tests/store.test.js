@@ -41,3 +41,13 @@ test('a failed index write never leaves an orphaned entry that clear() cannot re
   createCache(s).clear();
   assert.equal(s.getItem('aules.cache.course:1'), null);
 });
+
+test('remove deletes one entry and leaves the others', () => {
+  const c = createCache(createMemoryStorage());
+  c.set('a', 1);
+  c.set('b', 2);
+  c.remove('a');
+  assert.equal(c.get('a'), null);
+  assert.equal(c.get('b').data, 2);
+  assert.doesNotThrow(() => c.remove('never-existed'));
+});

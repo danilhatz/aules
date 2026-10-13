@@ -17,6 +17,9 @@ export function createCache(storage) {
         storage.setItem(P + key, JSON.stringify({ data, savedAt: Date.now() }));
       } catch { /* quota or storage unavailable: caching is best-effort */ }
     },
+    remove(key) {
+      try { storage.removeItem(P + key); } catch { /* best effort */ }
+    },
     clear() {
       for (const key of readIndex()) storage.removeItem(P + key);
       storage.removeItem(INDEX);

@@ -56,3 +56,7 @@ Open the HTTPS address in Safari, tap Share, then **Add to Home Screen**.
 - If your Aules password changes, the app asks you to sign in again and wipes the old saved login.
 - Anything Moodle sends as HTML passes an allow-list sanitizer; a strict Content-Security-Policy limits network access to `aules.edu.gva.es`.
 - If Safari blocks storage (private mode), nothing is saved and you sign in each time.
+
+## Releasing a change
+
+The app's files are served from the phone's saved copy (cache-first) so they never compete with Aules requests. A changed file therefore only reaches installed phones when `VERSION` in `sw.js` changes. `npm test` fails if any app file changed without that: bump `VERSION`, then run `npm run lock-shell` to record the new hash.

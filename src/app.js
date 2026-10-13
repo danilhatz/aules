@@ -237,7 +237,17 @@ export function createApp({
       if (auth.epoch() !== epoch) throw new MoodleError('signedout');
       return callWrite(fn);
     };
-    const result = await performSubmission({ api, write, assignment, input });
+    // Once a write went out (or may have), the saved status describes the world before it: drop it so
+    // a failed reload can never show the old answer as current.
+    const forgetStatus = () => { if (auth.epoch() === epoch) cache.remove(`status:${assignment.id}`); };
+    let result;
+    try {
+      result = await performSubmission({ api, write, assignment, input });
+    } catch (err) {
+      if (err && err.code === 'unconfirmed') forgetStatus();
+      throw err;
+    }
+    forgetStatus();
     if (auth.epoch() !== epoch) throw new MoodleError('signedout');
     drafts.remove(assignment.id);
     return result;

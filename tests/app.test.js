@@ -727,3 +727,36 @@ test('Diagnostics lists the slowest API calls of this session', async () => {
   await settle();
   assert.match(document.querySelector('pre.report').textContent, /Call timings \(slowest first\):\n  \w+: \d+ ms/);
 });
+
+test('after a successful save, if the status reload fails the screen never shows the outdated answer under "Draft saved."', async () => {
+  let statusCalls = 0;
+  const { app, root, win } = setup({
+    getSubmissionStatus: async () => { statusCalls += 1; if (statusCalls > 1) throw new MoodleError('network'); return rawStatus42; },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/assign/9';
+  await settle();
+  root.querySelector('textarea').value = 'respuesta nueva';
+  clickBtn(root, 'Save draft');
+  await settle();
+  const pane = root.querySelector('.pane-detail');
+  assert.match(pane.querySelector('.flash').textContent, /Draft saved/);
+  assert.ok(!pane.textContent.includes('Mi ciudad es bonita')); // the pre-save answer is not shown as current
+  assert.match(pane.textContent, /offline/i);
+});
+
+test('an unconfirmed write also discards the saved status so it cannot be mistaken for current', async () => {
+  let statusCalls = 0;
+  const { app, root, win, cache } = setup({
+    getSubmissionStatus: async () => { statusCalls += 1; if (statusCalls > 1) throw new MoodleError('network'); return rawStatus42; },
+    saveSubmission: async () => { throw new MoodleError('network'); },
+  }, true);
+  await app.start();
+  win.location.hash = '#/course/11/assign/9';
+  await settle();
+  root.querySelector('textarea').value = 'respuesta nueva';
+  clickBtn(root, 'Save draft');
+  await settle();
+  assert.equal(cache.get('status:42'), null);
+  assert.match(root.querySelector('.pane-detail .flash').textContent, /Could not confirm/);
+});
