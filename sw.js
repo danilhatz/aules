@@ -15,6 +15,7 @@ const SHELL = [
   "./src/content.js",
   "./src/courses.js",
   "./src/diagnostics.js",
+  "./src/drafts.js",
   "./src/errors.js",
   "./src/folders.js",
   "./src/main.js",
